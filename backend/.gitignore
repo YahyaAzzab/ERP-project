@@ -6,6 +6,7 @@ yarn-error.log*
 
 # Variables d'environnement (SENSIBLE — ne jamais committer)
 .env
+.env.test
 .env.local
 .env.production
 
