@@ -7,6 +7,8 @@ const FichePaie = require('../models/FichePaie');
 const MouvementStock = require('../models/MouvementStock');
 const mongoose = require('mongoose');
 
+const STATUTS_CA_DASHBOARD = ['VALIDEE', 'PAYEE'];
+
 // Helper pour les mois en français
 const moisNoms = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Aoû", "Sep", "Oct", "Nov", "Déc"];
 
@@ -33,12 +35,12 @@ exports.getKPIsGeneraux = async (req, res) => {
         ] = await Promise.all([
             // Chiffre d'affaires mois actuel
             Facture.aggregate([
-                { $match: { statut: 'PAYEE', datePaiement: { $gte: startOfMonth, $lte: endOfMonth } } },
+                { $match: { statut: { $in: STATUTS_CA_DASHBOARD }, date: { $gte: startOfMonth, $lte: endOfMonth } } },
                 { $group: { _id: null, total: { $sum: '$montantTTC' } } }
             ]),
             // Chiffre d'affaires mois précédent
             Facture.aggregate([
-                { $match: { statut: 'PAYEE', datePaiement: { $gte: startOfLastMonth, $lte: endOfLastMonth } } },
+                { $match: { statut: { $in: STATUTS_CA_DASHBOARD }, date: { $gte: startOfLastMonth, $lte: endOfLastMonth } } },
                 { $group: { _id: null, total: { $sum: '$montantTTC' } } }
             ]),
             // Factures impayées (VALIDEE mais pas PAYEE)
@@ -107,10 +109,10 @@ exports.getGraphiqueCA = async (req, res) => {
         const twelveMonthsAgo = new Date(today.getFullYear() - 1, today.getMonth(), 1);
 
         const data = await Facture.aggregate([
-            { $match: { statut: 'PAYEE', datePaiement: { $gte: twelveMonthsAgo } } },
+            { $match: { statut: { $in: STATUTS_CA_DASHBOARD }, date: { $gte: twelveMonthsAgo } } },
             {
                 $group: {
-                    _id: { year: { $year: "$datePaiement" }, month: { $month: "$datePaiement" } },
+                    _id: { year: { $year: "$date" }, month: { $month: "$date" } },
                     ca: { $sum: "$montantTTC" },
                     nombreFactures: { $sum: 1 }
                 }
@@ -344,7 +346,8 @@ exports.getAlertesDashboard = async (req, res) => {
 
             // Factures validées mais non payées (impayées)
             Facture.find({ statut: 'VALIDEE' })
-                .select('numero clientNom montantTTC dateEcheance')
+                .populate('client', 'nom')
+                .select('numero client montantTTC dateEcheance')
                 .lean()
         ]);
 
@@ -374,13 +377,13 @@ exports.getAlertesDashboard = async (req, res) => {
 
             // On s'assure que la facture et son client existent
             facturesImpayees: factures
-                .filter(f => f && f.clientNom)
+                .filter(f => f)
                 .map(f => ({
                     numero: f.numero,
-                    client: f.clientNom || 'Client non defini',
+                    client: f.client?.nom || 'Client non defini',
                     montant: f.montantTTC,
                     dateEcheance: f.dateEcheance,
-                    message: `Facture N°${f.numero} de ${f.montantTTC} MAD pour ${f.clientNom} est impayee.`
+                    message: `Facture N°${f.numero} de ${f.montantTTC} MAD pour ${f.client?.nom || 'Client non defini'} est impayee.`
                 }))
         };
 

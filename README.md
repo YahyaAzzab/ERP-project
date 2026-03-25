@@ -550,6 +550,147 @@ GET http://localhost:5001/api/auth/me
 - Facture verrouillee : une facture `VALIDEE` ou `PAYEE` ne peut plus etre modifiee/supprimee.
 - Compte verrouille : suppression interdite si des ecritures existent deja sur ce compte.
 
+---
+
+## Ameliorations & Nouvelles Fonctionnalites (Lot UX + Modules)
+
+### 1) Navigation responsive avec menu hamburger
+
+- Sidebar transformee en drawer mobile avec animation d'entree/sortie.
+- Overlay de fermeture au clic en mobile.
+- Fermeture automatique de la sidebar apres navigation sur petit ecran.
+- Header enrichi avec bouton hamburger (open/close).
+
+### 2) Nouveau module Clients (ADMIN)
+
+Backend :
+- Nouveau modele `Client`.
+- Nouveau controleur `clientController` (CRUD + statistiques).
+- Nouvelle route montee dans l'app : `/api/clients`.
+
+Frontend :
+- Nouvelle page `Clients` avec statistiques, recherche/filtres, CRUD et detail client.
+- Nouveau service API `clientService`.
+- Integration route protegee admin et lien Sidebar admin.
+
+### 3) Fournisseurs : actions sensibles reservees ADMIN
+
+- Cote UI, les actions creer/modifier/supprimer fournisseur sont masquees pour les roles non admin.
+- Le role MAGASINIER conserve les fonctionnalites de consultation.
+
+### 4) RH : historique des statuts employe
+
+- Schema `Employe` etendu avec `historiqueStatuts`.
+- A la creation d'un employe, un premier evenement de statut est enregistre.
+- En modification, tout changement de statut cloture l'etat precedent et ajoute une nouvelle entree.
+- UI RH : modal d'historique des statuts + informations de contexte (motif/dates).
+
+### 5) RH Employes : actions rapides en emojis
+
+- Actions tableau modernisees avec icones emojis :
+  - `👁️` voir
+  - `✏️` modifier
+  - `🚫` desactiver
+  - `📋` historique statuts
+
+### 6) RH Conges : detail complet + traitement guide
+
+- Actions rapides en emojis : `✅`, `❌`, `🚫`, `👁️`.
+- Ajout d'une modal de detail conge (infos employe/departement/periode/commentaires).
+- Ajout d'une modal de traitement (approbation/refus) avec commentaire RH obligatoire.
+
+### 7) RH Fiches de paie : correction affichage cotisations
+
+- Correction du calcul/affichage des cotisations salariales et patronales en detail de bulletin.
+- Mise en evidence du salaire net pour lecture rapide.
+
+### 8) Stocks : couleurs de stock par seuil et simplification tableau
+
+- Coloration progressive des quantites de stock selon le niveau de risque.
+- Application de la logique de couleur dans `Produits` et `Inventaire`.
+- Suppression de la colonne `Alerte` dans `Produits` (information integree a la colonne stock).
+
+### 9) Export PDF par role (Compta, RH, Stocks, Clients)
+
+- Nouvelle utilite mutualisee `exportPDF` (jsPDF + AutoTable).
+- Nouvelle modal reutilisable `ExportModal` (options, colonnes, plage de dates).
+- Boutons d'export integres sur les pages metier principales, avec restriction par role.
+
+Pages exportees :
+- Comptabilite : Factures, Comptes (Balance/etat selon donnees).
+- Clients : liste clients.
+- RH : Employes, Conges, Fiches de paie.
+- Stocks : Produits, Mouvements, Inventaire.
+
+### Nouvelles routes backend (Lot)
+
+- `GET /api/clients`
+- `GET /api/clients/statistiques`
+- `GET /api/clients/:id`
+- `POST /api/clients`
+- `PUT /api/clients/:id`
+- `DELETE /api/clients/:id`
+
+### Nouvelles dependances frontend
+
+- `jspdf`
+- `jspdf-autotable`
+
+### Validation rapide effectuee
+
+- Build frontend production : OK.
+- Suite de tests backend : 9/9 OK.
+
+---
+
+## Liaison Factures ↔ Clients
+
+- Les factures referencent maintenant le client via `client` (ObjectId vers la collection `clients`).
+- Les anciens champs texte (`clientNom`, `clientEmail`) restent disponibles en compatibilite via des virtuels Mongoose.
+- Le module Comptabilite lit les infos client via `populate('client', 'nom email telephone ville')`.
+- Le module Clients calcule ses stats depuis les vraies factures (`Facture.client`) et non plus via matching texte.
+
+### Migration automatique des anciennes factures
+
+Commande :
+
+```bash
+cd backend
+npm run migrate:clients
+```
+
+Le script :
+- recupere les factures legacy sans `client` ObjectId,
+- cherche un client existant par nom,
+- cree un client si necessaire,
+- met a jour chaque facture avec `client = _id`.
+
+Sortie console :
+- `X clients crees, Y factures mises a jour`
+
+### Synchronisation des stats client en temps reel
+
+- Une fonction `recalculerStatsClient(clientId)` met a jour :
+  - `chiffreAffaires` (somme des factures `PAYEE`)
+  - `nombreFactures` (compte total des factures)
+- Cette fonction est appelee automatiquement apres :
+  - creation d'une facture,
+  - changement de statut d'une facture,
+  - suppression d'une facture brouillon.
+
+### Mise a jour Frontend
+
+- Formulaire de creation facture :
+  - le client est selectionne via un select charge depuis les clients `ACTIF`,
+  - un filtre temps reel permet de rechercher par nom/ville,
+  - un bouton `+ Nouveau client` permet une creation rapide sans quitter la page,
+  - le client cree est auto-selectionne dans le formulaire facture.
+- Tableau des factures :
+  - la colonne client est cliquable et redirige vers `/clients/:id`.
+- Detail client :
+  - section `Factures associees` avec liens vers les factures,
+  - KPI detaille (nombre, CA, facture recente, montant moyen).
+
 ### Tests Thunder Client / Postman
 
 #### Test 1 — Lister les comptes (token COMPTABLE)

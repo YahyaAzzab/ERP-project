@@ -12,15 +12,15 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4">
-      <div className={`bg-white rounded-lg shadow-xl w-full ${sizeClasses[size]} flex flex-col animate-[fadeIn_0.2s_ease-out]`}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-start sm:items-center p-4 overflow-y-auto">
+      <div className={`bg-white rounded-lg shadow-xl w-full ${sizeClasses[size]} flex flex-col animate-[fadeIn_0.2s_ease-out] max-h-[90vh] my-4`}>
         <header className="flex justify-between items-center p-4 border-b">
           <h3 className="text-lg font-semibold">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X size={24} />
           </button>
         </header>
-        <main className="p-4 overflow-y-auto">
+        <main className="p-4 overflow-y-auto max-h-[calc(90vh-80px)]">
           {children}
         </main>
       </div>

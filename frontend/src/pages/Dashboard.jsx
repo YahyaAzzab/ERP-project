@@ -38,33 +38,38 @@ const Dashboard = () => {
   const [departementsData, setDepartementsData] = useState([]);
   const [mouvementsData, setMouvementsData] = useState([]);
   const [alertes, setAlertes] = useState({ stocks: [], congesEnAttente: [], facturesImpayees: [] });
+  const [lastRefreshAt, setLastRefreshAt] = useState(null);
+
+  const fetchDashboard = async () => {
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const [kpisRes, caRes, depRes, mouvRes, alertesRes] = await Promise.all([
+        getKPIs(),
+        getGraphiqueCA(),
+        getGraphiqueEmployesDepartement(),
+        getGraphiqueMouvementsStock(),
+        getAlertes(),
+      ]);
+
+      setKpis(kpisRes?.data?.data || null);
+      setCaData(Array.isArray(caRes?.data?.data) ? caRes.data.data : []);
+      setDepartementsData(Array.isArray(depRes?.data?.data) ? depRes.data.data : []);
+      setMouvementsData(Array.isArray(mouvRes?.data?.data) ? mouvRes.data.data : []);
+      setAlertes(alertesRes?.data?.data || { stocks: [], congesEnAttente: [], facturesImpayees: [] });
+      setLastRefreshAt(new Date());
+    } catch (error) {
+      setErrorMsg(error?.response?.data?.message || 'Chargement dashboard impossible.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchDashboard = async () => {
-      setLoading(true);
-      setErrorMsg('');
-      try {
-        const [kpisRes, caRes, depRes, mouvRes, alertesRes] = await Promise.all([
-          getKPIs(),
-          getGraphiqueCA(),
-          getGraphiqueEmployesDepartement(),
-          getGraphiqueMouvementsStock(),
-          getAlertes(),
-        ]);
-
-        setKpis(kpisRes?.data?.data || null);
-        setCaData(Array.isArray(caRes?.data?.data) ? caRes.data.data : []);
-        setDepartementsData(Array.isArray(depRes?.data?.data) ? depRes.data.data : []);
-        setMouvementsData(Array.isArray(mouvRes?.data?.data) ? mouvRes.data.data : []);
-        setAlertes(alertesRes?.data?.data || { stocks: [], congesEnAttente: [], facturesImpayees: [] });
-      } catch (error) {
-        setErrorMsg(error?.response?.data?.message || 'Chargement dashboard impossible.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchDashboard();
+
+    const intervalId = setInterval(fetchDashboard, 30000);
+    return () => clearInterval(intervalId);
   }, []);
 
   const cards = useMemo(() => {
@@ -87,6 +92,9 @@ const Dashboard = () => {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-sm text-gray-500 mt-1">Vue globale des indicateurs ERP en temps reel.</p>
+        {lastRefreshAt && (
+          <p className="text-xs text-gray-400 mt-1">Derniere mise a jour: {lastRefreshAt.toLocaleTimeString('fr-FR')}</p>
+        )}
       </div>
 
       {errorMsg && <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 text-sm">{errorMsg}</div>}
@@ -181,7 +189,7 @@ const Dashboard = () => {
           <div className="space-y-2 max-h-64 overflow-auto">
             {(alertes.facturesImpayees || []).length === 0 && <p className="text-sm text-gray-500">Aucune alerte.</p>}
             {(alertes.facturesImpayees || []).map((a, idx) => (
-              <button key={idx} onClick={() => navigate('/comptabilite')} className="w-full text-left p-2 rounded border border-blue-100 hover:bg-blue-50">
+              <button key={idx} onClick={() => navigate('/comptabilite/factures')} className="w-full text-left p-2 rounded border border-blue-100 hover:bg-blue-50">
                 <p className="text-sm font-medium text-gray-900">{a.numero} - {a.client}</p>
                 <p className="text-xs text-gray-600">{formatCurrency(a.montant)}</p>
               </button>

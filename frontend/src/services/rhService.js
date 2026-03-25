@@ -40,6 +40,10 @@ export const createConge = (data) => {
   return api.post('/rh/conges', data);
 };
 
+export const getCongeById = (id) => {
+  return api.get(`/rh/conges/${id}`);
+};
+
 export const traiterConge = (id, data) => {
   return api.put(`/rh/conges/${id}/traiter`, data);
 };

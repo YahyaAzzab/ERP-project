@@ -115,7 +115,16 @@ exports.createEmploye = async (req, res) => {
             adresse,
             matricule,
             soldeConges: 18, // Valeur par défaut
-            statut: 'ACTIF'
+            statut: 'ACTIF',
+            historiqueStatuts: [
+                {
+                    statut: 'ACTIF',
+                    dateDebut: dateEmbauche ? new Date(dateEmbauche) : new Date(),
+                    dateFin: null,
+                    motif: 'Creation employe',
+                    modifiePar: req.user?._id,
+                },
+            ],
         });
 
         const savedEmploye = await newEmploye.save();
@@ -128,7 +137,21 @@ exports.createEmploye = async (req, res) => {
 
 exports.updateEmploye = async (req, res) => {
     try {
-        const { nom, prenom, email, poste, departement, telephone, adresse, salaireBrut, typeContrat, statut } = req.body;
+        const {
+            nom,
+            prenom,
+            email,
+            poste,
+            departement,
+            telephone,
+            adresse,
+            salaireBrut,
+            typeContrat,
+            statut,
+            motif,
+            dateDebutStatut,
+            dateFinStatut,
+        } = req.body;
         
         const employe = await Employe.findById(req.params.id);
         if (!employe) {
@@ -145,7 +168,34 @@ exports.updateEmploye = async (req, res) => {
         employe.adresse = adresse || employe.adresse;
         employe.salaireBrut = salaireBrut || employe.salaireBrut;
         employe.typeContrat = typeContrat || employe.typeContrat;
-        employe.statut = statut || employe.statut;
+        const oldStatut = employe.statut;
+        const newStatut = statut || employe.statut;
+        employe.statut = newStatut;
+
+        if (newStatut !== oldStatut) {
+            const now = dateDebutStatut ? new Date(dateDebutStatut) : new Date();
+
+            if (!Array.isArray(employe.historiqueStatuts)) {
+                employe.historiqueStatuts = [];
+            }
+
+            // Cloture le statut en cours
+            const currentOpen = [...employe.historiqueStatuts]
+                .reverse()
+                .find((entry) => entry && !entry.dateFin);
+
+            if (currentOpen) {
+                currentOpen.dateFin = now;
+            }
+
+            employe.historiqueStatuts.push({
+                statut: newStatut,
+                dateDebut: now,
+                dateFin: dateFinStatut ? new Date(dateFinStatut) : null,
+                motif: motif || undefined,
+                modifiePar: req.user?._id,
+            });
+        }
 
         const updatedEmploye = await employe.save();
         return apiResponse.success(res, updatedEmploye);
@@ -230,7 +280,8 @@ exports.getConges = async (req, res) => {
         if (type) query.type = type;
 
         const conges = await Conge.find(query)
-            .populate('employe', 'nom prenom matricule')
+            .populate('employe', 'nom prenom matricule departement poste')
+            .populate('traitePar', 'nom prenom email role')
             .sort({ dateDebut: -1 })
             .limit(limit * 1)
             .skip((page - 1) * limit)
@@ -247,8 +298,8 @@ exports.getConges = async (req, res) => {
 exports.getCongeById = async (req, res) => {
     try {
         const conge = await Conge.findById(req.params.id)
-            .populate('employe', 'nom prenom matricule poste')
-            .populate('traitePar', 'email');
+            .populate('employe', 'nom prenom matricule poste departement')
+            .populate('traitePar', 'nom prenom email role');
             
         if (!conge) {
             return apiResponse.error(res, 'Congé introuvable', 404);

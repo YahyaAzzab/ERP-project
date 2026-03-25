@@ -6,7 +6,7 @@ const Header = () => {
 
   return (
     <header className="bg-white shadow-md p-4 flex justify-between items-center">
-      <div>
+      <div className="flex items-center gap-3">
         <h2 className="text-xl font-semibold">Tableau de bord</h2>
       </div>
       <div>

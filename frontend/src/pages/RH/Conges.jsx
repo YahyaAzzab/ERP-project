@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { CheckCircle2, XCircle, Ban, Eye, FileText } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import DataTable from '../../components/common/DataTable';
 import Badge from '../../components/common/Badge';
-import { annulerConge, createConge, getConges, getEmployes, traiterConge } from '../../services/rhService';
+import ExportModal from '../../components/common/ExportModal';
+import { annulerConge, createConge, getCongeById, getConges, getEmployes, traiterConge } from '../../services/rhService';
 import { useAuth } from '../../context/AuthContext';
+import { exportCongesPDF } from '../../utils/exportPDF';
 
 const TYPES_CONGE = ['ANNUEL', 'MALADIE', 'SANS_SOLDE', 'MATERNITE', 'PATERNITE'];
 const STATUTS = ['TOUS', 'EN_ATTENTE', 'APPROUVE', 'REFUSE'];
@@ -48,6 +51,10 @@ const Conges = () => {
   const [statut, setStatut] = useState('TOUS');
   const [errorMsg, setErrorMsg] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const [detailsModal, setDetailsModal] = useState({ open: false, conge: null });
+  const [traitementModal, setTraitementModal] = useState({ open: false, conge: null, statut: 'APPROUVE' });
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [commentaireRH, setCommentaireRH] = useState('');
 
   const { register, handleSubmit, watch, reset, formState: { isSubmitting } } = useForm({
     defaultValues: {
@@ -103,7 +110,7 @@ const Conges = () => {
 
   const onApprove = async (row) => {
     try {
-      await traiterConge(row._id, { statut: 'APPROUVE' });
+      await traiterConge(row._id, { statut: 'APPROUVE', commentaireRH });
       fetchData();
     } catch (error) {
       setErrorMsg(error?.response?.data?.message || 'Action impossible.');
@@ -112,7 +119,7 @@ const Conges = () => {
 
   const onReject = async (row) => {
     try {
-      await traiterConge(row._id, { statut: 'REFUSE' });
+      await traiterConge(row._id, { statut: 'REFUSE', commentaireRH });
       fetchData();
     } catch (error) {
       setErrorMsg(error?.response?.data?.message || 'Action impossible.');
@@ -141,6 +148,33 @@ const Conges = () => {
     { Header: 'Actions', accessor: 'actions' },
   ], []);
 
+  const openDetails = async (row) => {
+    try {
+      const response = await getCongeById(row._id);
+      setDetailsModal({ open: true, conge: response?.data?.data || row });
+    } catch {
+      setDetailsModal({ open: true, conge: row });
+    }
+  };
+
+  const openTraitement = (row, nextStatut) => {
+    setCommentaireRH('');
+    setTraitementModal({ open: true, conge: row, statut: nextStatut });
+  };
+
+  const submitTraitement = async () => {
+    if (!commentaireRH.trim()) {
+      setErrorMsg('Le commentaire RH est obligatoire pour traiter le conge.');
+      return;
+    }
+
+    if (traitementModal.statut === 'APPROUVE') await onApprove(traitementModal.conge);
+    if (traitementModal.statut === 'REFUSE') await onReject(traitementModal.conge);
+
+    setTraitementModal({ open: false, conge: null, statut: 'APPROUVE' });
+    setCommentaireRH('');
+  };
+
   const rows = conges.map((c) => {
     const jours = c.nombreJours || businessDays(c.dateDebut, c.dateFin);
     const isPending = c.statut === 'EN_ATTENTE';
@@ -150,16 +184,17 @@ const Conges = () => {
       employeName: `${c.employe?.prenom || ''} ${c.employe?.nom || ''}`.trim() || '-',
       jours,
       actions: (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex items-center gap-2">
           {canApprove && isPending && (
             <>
-              <button onClick={() => onApprove(c)} className="text-xs px-2 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200">Approuver</button>
-              <button onClick={() => onReject(c)} className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200">Refuser</button>
+              <button title="Approuver" onClick={() => openTraitement(c, 'APPROUVE')} className="p-1 text-green-600 hover:text-green-800 hover:scale-110 transition"><CheckCircle2 size={18} /></button>
+              <button title="Refuser" onClick={() => openTraitement(c, 'REFUSE')} className="p-1 text-red-600 hover:text-red-800 hover:scale-110 transition"><XCircle size={18} /></button>
             </>
           )}
           {isPending && (
-            <button onClick={() => onCancel(c)} className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Annuler</button>
+            <button title="Annuler" onClick={() => onCancel(c)} className="p-1 text-gray-700 hover:text-black hover:scale-110 transition"><Ban size={18} /></button>
           )}
+          <button title="Voir details" onClick={() => openDetails(c)} className="p-1 text-blue-600 hover:text-blue-800 hover:scale-110 transition"><Eye size={18} /></button>
         </div>
       ),
     };
@@ -173,6 +208,14 @@ const Conges = () => {
           <p className="text-sm text-gray-500">Demandes de conges et workflow d'approbation.</p>
         </div>
         <div className="flex gap-2">
+          {canApprove && (
+            <button
+              onClick={() => setIsExportOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg border border-gray-300 text-sm"
+            >
+              <FileText size={16} /> Exporter PDF
+            </button>
+          )}
           <select value={statut} onChange={(e) => setStatut(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300 text-sm">
             {STATUTS.map((s) => <option key={s} value={s}>{s === 'TOUS' ? 'Tous' : s}</option>)}
           </select>
@@ -229,6 +272,79 @@ const Conges = () => {
           </div>
         </form>
       </Modal>
+
+      <Modal isOpen={detailsModal.open} onClose={() => setDetailsModal({ open: false, conge: null })} title="Details conge" size="lg">
+        {detailsModal.conge && (
+          <div className="space-y-3 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <p><span className="text-gray-500">Employe:</span> <strong>{detailsModal.conge.employe?.prenom} {detailsModal.conge.employe?.nom}</strong></p>
+              <p><span className="text-gray-500">Matricule:</span> {detailsModal.conge.employe?.matricule || '-'}</p>
+              <p><span className="text-gray-500">Departement:</span> {detailsModal.conge.employe?.departement || '-'}</p>
+              <p><span className="text-gray-500">Type:</span> {detailsModal.conge.type}</p>
+              <p><span className="text-gray-500">Periode:</span> {formatDate(detailsModal.conge.dateDebut)} - {formatDate(detailsModal.conge.dateFin)}</p>
+              <p><span className="text-gray-500">Jours ouvres:</span> {detailsModal.conge.nombreJours || businessDays(detailsModal.conge.dateDebut, detailsModal.conge.dateFin)}</p>
+              <p><span className="text-gray-500">Statut:</span> <Badge status={detailsModal.conge.statut} /></p>
+              <p><span className="text-gray-500">Date demande:</span> {formatDate(detailsModal.conge.createdAt)}</p>
+              <p><span className="text-gray-500">Traite par:</span> {detailsModal.conge.traitePar ? `${detailsModal.conge.traitePar.prenom || ''} ${detailsModal.conge.traitePar.nom || ''}`.trim() : '-'}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">Motif:</p>
+              <p className="font-medium">{detailsModal.conge.motif || '-'}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">Commentaire RH:</p>
+              <p className="font-medium">{detailsModal.conge.commentaireRH || '-'}</p>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={traitementModal.open}
+        onClose={() => setTraitementModal({ open: false, conge: null, statut: 'APPROUVE' })}
+        title={traitementModal.statut === 'APPROUVE' ? 'Approuver le conge' : 'Refuser le conge'}
+        size="md"
+      >
+        {traitementModal.conge && (
+          <div className="space-y-3">
+            <div className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded p-3">
+              <p><strong>{traitementModal.conge.employe?.prenom} {traitementModal.conge.employe?.nom}</strong></p>
+              <p>{traitementModal.conge.type} - {formatDate(traitementModal.conge.dateDebut)} au {formatDate(traitementModal.conge.dateFin)}</p>
+              <p>{traitementModal.conge.nombreJours || businessDays(traitementModal.conge.dateDebut, traitementModal.conge.dateFin)} jour(s)</p>
+            </div>
+            <div>
+              <label className="text-sm text-gray-600">Commentaire RH</label>
+              <textarea
+                rows={3}
+                value={commentaireRH}
+                onChange={(e) => setCommentaireRH(e.target.value)}
+                className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setTraitementModal({ open: false, conge: null, statut: 'APPROUVE' })} className="px-4 py-2 rounded-lg border border-gray-200">Annuler</button>
+              <button
+                type="button"
+                onClick={submitTraitement}
+                className={`px-4 py-2 rounded-lg text-white ${traitementModal.statut === 'APPROUVE' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
+              >
+                {traitementModal.statut === 'APPROUVE' ? 'Approuver' : 'Refuser'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <ExportModal
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        title="Exporter les conges en PDF"
+        rowsCount={conges.length}
+        onExport={({ dateDebut, dateFin }) => {
+          exportCongesPDF(conges, { statut, dateDebut, dateFin });
+          setIsExportOpen(false);
+        }}
+      />
     </div>
   );
 };

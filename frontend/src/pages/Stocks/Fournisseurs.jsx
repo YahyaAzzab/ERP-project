@@ -4,6 +4,7 @@ import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
 import SearchBar from '../../components/common/SearchBar';
 import { createFournisseur, deleteFournisseur, getFournisseurs, updateFournisseur } from '../../services/stocksService';
+import { useAuth } from '../../context/AuthContext';
 
 const parseList = (response) => {
   const data = response?.data?.data;
@@ -13,6 +14,8 @@ const parseList = (response) => {
 };
 
 const Fournisseurs = () => {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole('ADMIN');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [fournisseurs, setFournisseurs] = useState([]);
@@ -110,14 +113,16 @@ const Fournisseurs = () => {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <h2 className="text-xl font-bold text-gray-900">Fournisseurs</h2>
-          <button onClick={openCreate} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium">+ Nouveau Fournisseur</button>
+          {isAdmin && (
+            <button onClick={openCreate} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium">+ Nouveau Fournisseur</button>
+          )}
         </div>
         <SearchBar placeholder="Rechercher nom ou ville" value={search} onSearch={setSearch} />
       </div>
 
       {errorMsg && <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 text-sm">{errorMsg}</div>}
 
-      <DataTable columns={columns} data={rows} loading={loading} onEdit={openEdit} onDelete={onDelete} />
+      <DataTable columns={columns} data={rows} loading={loading} onEdit={isAdmin ? openEdit : undefined} onDelete={isAdmin ? onDelete : undefined} />
 
       <Modal isOpen={modal.open} onClose={() => setModal({ open: false, mode: 'create', fournisseur: null })} title={modal.mode === 'create' ? 'Nouveau fournisseur' : 'Modifier fournisseur'} size="md">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">

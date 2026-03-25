@@ -20,6 +20,7 @@ const comptaRoutes = require('./routes/comptaRoutes');
 const rhRoutes = require('./routes/rhRoutes');
 const stocksRoutes = require('./routes/stocksRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
+const clientRoutes = require('./routes/clientRoutes');
 
 const app = express();
 
@@ -101,6 +102,7 @@ app.use('/api/comptabilite', comptaRoutes);
 app.use('/api/rh',           rhRoutes);
 app.use('/api/stocks',       stocksRoutes);
 app.use('/api/dashboard',    dashboardRoutes);
+app.use('/api/clients',      clientRoutes);
 // ---
 
 // =============================================================

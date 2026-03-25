@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { FileText } from 'lucide-react';
 import Modal from '../../components/common/Modal';
 import DataTable from '../../components/common/DataTable';
+import ExportModal from '../../components/common/ExportModal';
 import { deleteFichePaie, genererFichePaie, getEmployes, getFichesPaie } from '../../services/rhService';
+import { exportFichesPaiePDF } from '../../utils/exportPDF';
+import { useAuth } from '../../context/AuthContext';
 
 const monthNames = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre'];
 
@@ -22,6 +26,7 @@ const extractEmployes = (response) => {
 const formatCurrency = (value) => new Intl.NumberFormat('fr-MA', { style: 'currency', currency: 'MAD' }).format(Number(value || 0));
 
 const FichesPaie = () => {
+  const { hasRole } = useAuth();
   const now = new Date();
   const [loading, setLoading] = useState(false);
   const [fiches, setFiches] = useState([]);
@@ -31,6 +36,7 @@ const FichesPaie = () => {
   const [selectedEmploye, setSelectedEmploye] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [details, setDetails] = useState({ open: false, fiche: null });
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -127,6 +133,14 @@ const FichesPaie = () => {
             <option value="">Selectionner employe</option>
             {employes.map((e) => <option key={e._id} value={e._id}>{e.matricule} - {e.prenom} {e.nom}</option>)}
           </select>
+          {hasRole('ADMIN', 'RH') && (
+            <button
+              onClick={() => setIsExportOpen(true)}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg border border-gray-300 text-sm"
+            >
+              <FileText size={16} /> Exporter PDF
+            </button>
+          )}
           <button onClick={onGenerate} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium">Generer les fiches</button>
         </div>
       </div>
@@ -144,14 +158,36 @@ const FichesPaie = () => {
             </div>
 
             <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 space-y-2">
-              <div className="flex justify-between"><span>Salaire brut</span><strong>{formatCurrency(details.fiche.salaireBrut)}</strong></div>
-              <div className="flex justify-between"><span>- Cotisations salariales (22%)</span><strong>{formatCurrency(details.fiche.cotisationsSalariales || details.fiche.totalCotisationsSalariales || 0)}</strong></div>
-              <div className="flex justify-between text-base border-t pt-2"><span>= Salaire net</span><strong>{formatCurrency(details.fiche.salaireNet)}</strong></div>
-              <div className="text-xs text-gray-500 pt-2">Cotisations patronales (30%) info: {formatCurrency(details.fiche.cotisationsPatronales || 0)}</div>
+              {(() => {
+                const brut = Number(details.fiche.salaireBrut || 0);
+                const cotisations = Number(details.fiche.cotisationsSalariales || details.fiche.totalCotisationsSalariales || Math.round(brut * 0.22));
+                const cotisationsPatronales = Number(details.fiche.cotisationsPatronales || Math.round(brut * 0.3));
+                const net = Number(details.fiche.salaireNet || (brut - cotisations));
+
+                return (
+                  <>
+                    <div className="flex justify-between"><span>Salaire brut</span><strong>{formatCurrency(brut)}</strong></div>
+                    <div className="flex justify-between text-red-600"><span>Cotisations salariales (22%)</span><strong>-{formatCurrency(cotisations)}</strong></div>
+                    <div className="flex justify-between text-gray-600"><span>Cotisations patronales (30%)</span><strong>{formatCurrency(cotisationsPatronales)}</strong></div>
+                    <div className="flex justify-between text-base border-t pt-2 text-green-700"><span>Salaire net</span><strong>{formatCurrency(net)}</strong></div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}
       </Modal>
+
+      <ExportModal
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        title="Exporter les fiches de paie en PDF"
+        rowsCount={fiches.length}
+        onExport={() => {
+          exportFichesPaiePDF(fiches);
+          setIsExportOpen(false);
+        }}
+      />
     </div>
   );
 };

@@ -8,6 +8,8 @@ const mongoose = require('mongoose');
 const CompteComptable = require('../models/CompteComptable');
 const EcritureComptable = require('../models/EcritureComptable');
 const Facture = require('../models/Facture');
+const Client = require('../models/Client');
+const { recalculerStatsClient } = require('./clientController');
 const { success, error, paginate, created } = require('../utils/apiResponse');
 
 const { isValidObjectId } = mongoose;
@@ -91,6 +93,38 @@ const generateFactureNumero = async () => {
 const ensureFactureMutable = (facture) => {
   const statut = normalizeStatus(facture.statut);
   return statut === 'BROUILLON';
+};
+
+const resolveOrCreateClientFromPayload = async ({ clientId, clientNom, clientEmail, client }, userId) => {
+  if (clientId) {
+    if (!isValidObjectId(clientId)) {
+      return { ok: false, status: 400, message: 'clientId invalide' };
+    }
+    const existing = await Client.findById(clientId);
+    if (!existing) {
+      return { ok: false, status: 404, message: 'Client introuvable' };
+    }
+    return { ok: true, client: existing };
+  }
+
+  const fallbackNom = String(clientNom || client?.nom || '').trim();
+  const fallbackEmail = String(clientEmail || client?.email || '').trim().toLowerCase();
+
+  if (!fallbackNom) {
+    return { ok: false, status: 400, message: 'clientId ou clientNom est requis' };
+  }
+
+  const byNom = await Client.findOne({ nom: fallbackNom });
+  if (byNom) return { ok: true, client: byNom };
+
+  const createdClient = await Client.create({
+    nom: fallbackNom,
+    email: fallbackEmail || undefined,
+    statut: 'ACTIF',
+    creePar: userId,
+  });
+
+  return { ok: true, client: createdClient };
 };
 
 // =============================================================
@@ -559,7 +593,13 @@ const getFactures = async (req, res) => {
 
     if (search?.trim()) {
       const regex = new RegExp(search.trim(), 'i');
-      filter.$or = [{ numero: regex }, { clientNom: regex }];
+      const clients = await Client.find({ nom: regex }).select('_id').lean();
+      const clientIds = clients.map((c) => c._id);
+
+      filter.$or = [{ numero: regex }];
+      if (clientIds.length > 0) {
+        filter.$or.push({ client: { $in: clientIds } });
+      }
     }
 
     const dateFilter = buildDateFilter(dateDebut, dateFin);
@@ -568,6 +608,7 @@ const getFactures = async (req, res) => {
     const [total, docs] = await Promise.all([
       Facture.countDocuments(filter),
       Facture.find(filter)
+        .populate('client', 'nom email telephone ville')
         .populate('creePar', 'nom prenom email role')
         .sort({ date: -1, createdAt: -1 })
         .skip(skip)
@@ -586,6 +627,7 @@ const getFactureById = async (req, res) => {
     if (!isValidObjectId(id)) return error(res, 'ID de facture invalide', 400);
 
     const facture = await Facture.findById(id)
+      .populate('client')
       .populate('creePar', 'nom prenom email role')
       .populate({
         path: 'ecrituresComptables',
@@ -635,10 +677,15 @@ const sanitizeLignes = (lignes, tva = 20) => {
 
 const createFacture = async (req, res) => {
   try {
-    const { client = {}, clientNom, clientEmail, clientAdresse, lignes, tva = 20, notes, dateEcheance } = req.body;
+    const { clientId, client = {}, clientNom, clientEmail, lignes, tva = 20, notes, dateEcheance } = req.body;
 
-    const nomClient = (client.nom || clientNom || '').trim();
-    if (!nomClient) return error(res, 'client.nom est requis', 400);
+    const clientResolution = await resolveOrCreateClientFromPayload(
+      { clientId, clientNom, clientEmail, client },
+      req.user._id
+    );
+    if (!clientResolution.ok) {
+      return error(res, clientResolution.message, clientResolution.status);
+    }
 
     const sanitized = sanitizeLignes(lignes, tva);
     if (!sanitized.valid) return error(res, sanitized.message, 400);
@@ -648,9 +695,7 @@ const createFacture = async (req, res) => {
     const facture = await Facture.create({
       numero,
       date: new Date(),
-      clientNom: nomClient,
-      clientEmail: (client.email || clientEmail || '').trim() || undefined,
-      clientAdresse: (client.adresse || clientAdresse || '').trim() || undefined,
+      client: clientResolution.client._id,
       lignes: sanitized.lignes,
       notes,
       dateEcheance: dateEcheance ? new Date(dateEcheance) : undefined,
@@ -658,7 +703,13 @@ const createFacture = async (req, res) => {
       creePar: req.user._id,
     });
 
-    return created(res, { facture }, 'Facture creee avec succes');
+    await recalculerStatsClient(clientResolution.client._id);
+
+    const populated = await Facture.findById(facture._id)
+      .populate('client', 'nom email telephone ville')
+      .populate('creePar', 'nom prenom email role');
+
+    return created(res, { facture: populated }, 'Facture creee avec succes');
   } catch (err) {
     if (err.code === 11000) {
       return error(res, 'Numero de facture deja existant. Reessayez.', 409);
@@ -679,20 +730,21 @@ const updateFacture = async (req, res) => {
       return error(res, 'Impossible de modifier une facture validee ou payee', 400);
     }
 
-    const { client = {}, clientNom, clientEmail, clientAdresse, lignes, tva, notes, dateEcheance } = req.body;
+    const { clientId, client = {}, clientNom, clientEmail, lignes, tva, notes, dateEcheance } = req.body;
 
-    const updatedNom = (client.nom || clientNom || facture.clientNom || '').trim();
-    if (!updatedNom) return error(res, 'client.nom est requis', 400);
-    facture.clientNom = updatedNom;
-
-    if (Object.prototype.hasOwnProperty.call(req.body, 'client') || Object.prototype.hasOwnProperty.call(req.body, 'clientEmail')) {
-      const mail = (client.email || clientEmail || '').trim();
-      facture.clientEmail = mail || undefined;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(req.body, 'client') || Object.prototype.hasOwnProperty.call(req.body, 'clientAdresse')) {
-      const adr = (client.adresse || clientAdresse || '').trim();
-      facture.clientAdresse = adr || undefined;
+    if (
+      Object.prototype.hasOwnProperty.call(req.body, 'clientId') ||
+      Object.prototype.hasOwnProperty.call(req.body, 'clientNom') ||
+      Object.prototype.hasOwnProperty.call(req.body, 'client')
+    ) {
+      const clientResolution = await resolveOrCreateClientFromPayload(
+        { clientId, clientNom, clientEmail, client },
+        req.user._id
+      );
+      if (!clientResolution.ok) {
+        return error(res, clientResolution.message, clientResolution.status);
+      }
+      facture.client = clientResolution.client._id;
     }
 
     if (Array.isArray(lignes)) {
@@ -706,6 +758,8 @@ const updateFacture = async (req, res) => {
 
     await facture.save();
 
+    await recalculerStatsClient(facture.client);
+
     return success(res, { facture }, 'Facture mise a jour avec succes');
   } catch (err) {
     return error(res, 'Erreur lors de la mise a jour de la facture', 500);
@@ -717,7 +771,7 @@ const updateStatutFacture = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return error(res, 'ID de facture invalide', 400);
 
-    const facture = await Facture.findById(id);
+    const facture = await Facture.findById(id).populate('client', 'nom email');
     if (!facture) return error(res, 'Facture introuvable', 404);
 
     const nextStatut = normalizeStatus(req.body.statut);
@@ -742,7 +796,7 @@ const updateStatutFacture = async (req, res) => {
 
       const ecritureDebit = await EcritureComptable.create({
         date: new Date(),
-        libelle: `Validation facture ${facture.numero} - Client`,
+        libelle: `Validation facture ${facture.numero} - Client ${facture.client?.nom || ''}`.trim(),
         montantDebit: facture.montantTTC,
         montantCredit: 0,
         compte: compteClient._id,
@@ -770,7 +824,10 @@ const updateStatutFacture = async (req, res) => {
     facture.statut = nextStatut;
     await facture.save();
 
+    await recalculerStatsClient(facture.client?._id || facture.client);
+
     const populated = await Facture.findById(facture._id)
+      .populate('client', 'nom email telephone ville')
       .populate('creePar', 'nom prenom email role')
       .populate('ecrituresComptables');
 
@@ -792,7 +849,11 @@ const deleteFacture = async (req, res) => {
       return error(res, 'Seules les factures brouillon peuvent etre supprimees', 400);
     }
 
+    const clientId = facture.client;
     await Facture.findByIdAndDelete(id);
+    if (clientId) {
+      await recalculerStatsClient(clientId);
+    }
     return success(res, null, 'Facture supprimee avec succes');
   } catch (err) {
     return error(res, 'Erreur lors de la suppression de la facture', 500);

@@ -1,11 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
-import { Eye, Plus, RefreshCcw, Trash2 } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Eye, Plus, RefreshCcw, Trash2, FileText, CheckCircle2 } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Badge from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
+import ExportModal from '../../components/common/ExportModal';
 import SearchBar from '../../components/common/SearchBar';
 import { createFacture, deleteFacture, getFactureById, getFactures, updateStatutFacture } from '../../services/comptaService';
+import { createClient, getClientsActifs } from '../../services/clientService';
+import { exportFacturesPDF } from '../../utils/exportPDF';
+import { useAuth } from '../../context/AuthContext';
 
 const STATUS_OPTIONS = ['TOUS', 'BROUILLON', 'VALIDEE', 'PAYEE', 'ANNULEE'];
 
@@ -27,19 +32,26 @@ const toInputDate = (d) => {
 };
 
 const Factures = () => {
+  const { factureId } = useParams();
+  const navigate = useNavigate();
+  const { hasRole } = useAuth();
   const [loading, setLoading] = useState(false);
   const [factures, setFactures] = useState([]);
+  const [clientsActifs, setClientsActifs] = useState([]);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('TOUS');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isQuickClientOpen, setIsQuickClientOpen] = useState(false);
   const [statusModal, setStatusModal] = useState({ open: false, facture: null });
   const [detailsModal, setDetailsModal] = useState({ open: false, facture: null });
+  const [isExportOpen, setIsExportOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [quickClient, setQuickClient] = useState({ nom: '', email: '', ville: '', telephone: '' });
+  const [validatedLines, setValidatedLines] = useState({});
 
-  const { control, register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm({
+  const { control, register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm({
     defaultValues: {
-      clientNom: '',
-      clientEmail: '',
+      clientId: '',
       dateEcheance: '',
       notes: '',
       lignes: [{ designation: '', quantite: 1, prixUnitaire: 0 }],
@@ -48,6 +60,10 @@ const Factures = () => {
 
   const { fields, append, remove } = useFieldArray({ control, name: 'lignes' });
   const watchedLines = watch('lignes');
+
+  useEffect(() => {
+    setValidatedLines({});
+  }, [watchedLines]);
 
   const totals = useMemo(() => {
     const montantHT = (watchedLines || []).reduce((sum, l) => {
@@ -74,14 +90,33 @@ const Factures = () => {
     }
   };
 
+  const fetchClientsActifs = async () => {
+    try {
+      const response = await getClientsActifs();
+      const data = response?.data?.data;
+      const list = Array.isArray(data) ? data : (Array.isArray(data?.clients) ? data.clients : []);
+      setClientsActifs(list);
+    } catch {
+      setClientsActifs([]);
+    }
+  };
+
   useEffect(() => {
     fetchFactures();
   }, [search, status]);
 
+  useEffect(() => {
+    fetchClientsActifs();
+  }, []);
+
+  useEffect(() => {
+    if (!factureId) return;
+    openDetails({ _id: factureId });
+  }, [factureId]);
+
   const onCreateFacture = async (formData) => {
     const payload = {
-      clientNom: formData.clientNom,
-      clientEmail: formData.clientEmail || undefined,
+      clientId: formData.clientId,
       dateEcheance: formData.dateEcheance || undefined,
       notes: formData.notes || undefined,
       lignes: formData.lignes.map((l) => ({
@@ -98,6 +133,50 @@ const Factures = () => {
       fetchFactures();
     } catch (error) {
       setErrorMsg(error?.response?.data?.message || 'Creation de facture impossible.');
+    }
+  };
+
+  const validateLine = (index) => {
+    const line = watchedLines?.[index] || {};
+    const designation = String(line.designation || '').trim();
+    const quantite = Number(line.quantite);
+    const prixUnitaire = Number(line.prixUnitaire);
+
+    const isValid = Boolean(designation) && Number.isFinite(quantite) && quantite > 0 && Number.isFinite(prixUnitaire) && prixUnitaire >= 0;
+
+    if (!isValid) {
+      setErrorMsg(`Ligne ${index + 1}: renseignez designation, quantite > 0 et prix unitaire >= 0.`);
+      setValidatedLines((prev) => ({ ...prev, [index]: false }));
+      return;
+    }
+
+    setErrorMsg('');
+    setValidatedLines((prev) => ({ ...prev, [index]: true }));
+  };
+
+  const onCreateQuickClient = async () => {
+    if (!quickClient.nom.trim()) {
+      setErrorMsg('Le nom du client est obligatoire.');
+      return;
+    }
+
+    try {
+      const response = await createClient({
+        nom: quickClient.nom.trim(),
+        email: quickClient.email.trim() || undefined,
+        ville: quickClient.ville.trim() || undefined,
+        telephone: quickClient.telephone.trim() || undefined,
+        statut: 'ACTIF',
+      });
+      const createdClient = response?.data?.data;
+      await fetchClientsActifs();
+      if (createdClient?._id) {
+        setValue('clientId', createdClient._id);
+      }
+      setQuickClient({ nom: '', email: '', ville: '', telephone: '' });
+      setIsQuickClientOpen(false);
+    } catch (error) {
+      setErrorMsg(error?.response?.data?.message || 'Creation rapide du client impossible.');
     }
   };
 
@@ -156,7 +235,19 @@ const Factures = () => {
 
   const columns = [
     { Header: 'Numero', accessor: 'numero' },
-    { Header: 'Client', accessor: 'clientNom' },
+    {
+      Header: 'Client',
+      accessor: 'clientDisplay',
+      Cell: ({ value }) => {
+        const c = value?.client;
+        if (!c?._id) return value?.fallback || '-';
+        return (
+          <Link to={`/clients/${c._id}`} className="text-blue-600 hover:text-blue-800 hover:underline font-medium">
+            {c.nom}
+          </Link>
+        );
+      },
+    },
     {
       Header: 'Date',
       accessor: 'date',
@@ -191,6 +282,10 @@ const Factures = () => {
 
   const tableData = factures.map((f) => ({
     ...f,
+    clientDisplay: {
+      client: f.client,
+      fallback: f.clientNom || '-',
+    },
     actions: (
       <div className="flex items-center gap-2">
         <button
@@ -222,6 +317,10 @@ const Factures = () => {
     ),
   }));
 
+  const clientsOptions = useMemo(() => {
+    return [...clientsActifs].sort((a, b) => String(a.nom || '').localeCompare(String(b.nom || ''), 'fr'));
+  }, [clientsActifs]);
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
@@ -244,6 +343,14 @@ const Factures = () => {
             >
               <Plus size={16} /> Nouvelle Facture
             </button>
+            {hasRole('ADMIN', 'COMPTABLE') && (
+              <button
+                onClick={() => setIsExportOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg border border-gray-300 text-sm"
+              >
+                <FileText size={16} /> Exporter PDF
+              </button>
+            )}
           </div>
         </div>
 
@@ -272,22 +379,30 @@ const Factures = () => {
       <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="Nouvelle Facture" size="lg">
         <form onSubmit={handleSubmit(onCreateFacture)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm text-gray-600">Nom client</label>
-              <input
-                {...register('clientNom', { required: 'Le nom client est requis' })}
+            <div className="md:col-span-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-gray-600">Client</label>
+                <button
+                  type="button"
+                  onClick={() => setIsQuickClientOpen(true)}
+                  className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
+                >
+                  + Nouveau client
+                </button>
+              </div>
+
+              <select
+                {...register('clientId', { required: 'Selectionnez un client' })}
                 className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300"
-              />
-              {errors.clientNom && <p className="text-xs text-red-600 mt-1">{errors.clientNom.message}</p>}
+              >
+                <option value="">Selectionner un client</option>
+                {clientsOptions.map((c) => (
+                  <option key={c._id} value={c._id}>{c.nom} — {c.ville || 'Ville non renseignee'}</option>
+                ))}
+              </select>
+              {errors.clientId && <p className="text-xs text-red-600 mt-1">{errors.clientId.message}</p>}
             </div>
-            <div>
-              <label className="text-sm text-gray-600">Email client (optionnel)</label>
-              <input
-                type="email"
-                {...register('clientEmail')}
-                className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300"
-              />
-            </div>
+
             <div>
               <label className="text-sm text-gray-600">Date echeance</label>
               <input
@@ -320,11 +435,13 @@ const Factures = () => {
             {fields.map((field, index) => {
               const qty = Number(watchedLines?.[index]?.quantite || 0);
               const price = Number(watchedLines?.[index]?.prixUnitaire || 0);
-              const lineTotal = qty * price;
+              const lineHT = qty * price;
+              const lineTVA = lineHT * 0.2;
+              const lineTTC = lineHT + lineTVA;
 
               return (
-                <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
-                  <div className="md:col-span-5">
+                <div key={field.id} className={`grid grid-cols-1 md:grid-cols-12 gap-2 items-end border rounded-lg p-2 ${validatedLines[index] ? 'border-green-200 bg-green-50/40' : 'border-gray-100'}`}>
+                  <div className="md:col-span-4">
                     <label className="text-xs text-gray-500">Designation</label>
                     <input
                       {...register(`lignes.${index}.designation`, { required: true })}
@@ -351,15 +468,38 @@ const Factures = () => {
                       className="w-full px-3 py-2 rounded-lg border border-gray-300"
                     />
                   </div>
-                  <div className="md:col-span-2 text-sm font-semibold text-gray-700">
-                    {formatCurrency(lineTotal)}
+                  <div className="md:col-span-5 text-sm text-gray-700">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-gray-500">HT</span>
+                      <span className="font-semibold whitespace-nowrap">{formatCurrency(lineHT)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-gray-500">TVA (20%)</span>
+                      <span className="font-semibold whitespace-nowrap">{formatCurrency(lineTVA)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 border-t border-gray-100 pt-1">
+                      <span className="text-gray-700">TTC</span>
+                      <span className="font-bold whitespace-nowrap">{formatCurrency(lineTTC)}</span>
+                    </div>
+                    {validatedLines[index] && (
+                      <div className="mt-1 text-xs text-green-700 font-medium">Ligne validee visuellement</div>
+                    )}
                   </div>
-                  <div className="md:col-span-1">
+                  <div className="md:col-span-1 flex md:justify-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => validateLine(index)}
+                      className={`p-2 rounded-md transition ${validatedLines[index] ? 'text-green-700 bg-green-100 hover:bg-green-200' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'}`}
+                      title="Valider visuellement la ligne"
+                    >
+                      <CheckCircle2 size={18} />
+                    </button>
                     {fields.length > 1 && (
                       <button
                         type="button"
                         onClick={() => remove(index)}
-                        className="text-red-600 hover:text-red-800"
+                        className="text-red-600 hover:text-red-800 p-2 rounded-md hover:bg-red-50"
+                        title="Supprimer ligne"
                       >
                         <Trash2 size={18} />
                       </button>
@@ -413,7 +553,10 @@ const Factures = () => {
 
       <Modal
         isOpen={detailsModal.open}
-        onClose={() => setDetailsModal({ open: false, facture: null })}
+        onClose={() => {
+          setDetailsModal({ open: false, facture: null });
+          if (factureId) navigate('/comptabilite/factures');
+        }}
         title="Detail facture"
         size="lg"
       >
@@ -421,7 +564,7 @@ const Factures = () => {
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div><span className="text-gray-500">Numero</span><p className="font-semibold">{detailsModal.facture.numero}</p></div>
-              <div><span className="text-gray-500">Client</span><p className="font-semibold">{detailsModal.facture.clientNom}</p></div>
+              <div><span className="text-gray-500">Client</span><p className="font-semibold">{detailsModal.facture.client?.nom || detailsModal.facture.clientNom || '-'}</p></div>
               <div><span className="text-gray-500">Statut</span><p><Badge status={detailsModal.facture.statut} /></p></div>
             </div>
             <div className="border rounded-lg overflow-hidden">
@@ -448,6 +591,71 @@ const Factures = () => {
             </div>
           </div>
         )}
+      </Modal>
+
+      <ExportModal
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        title="Exporter les factures en PDF"
+        rowsCount={factures.length}
+        options={[
+          { key: 'BROUILLON', label: 'Inclure factures BROUILLON', defaultChecked: true },
+          { key: 'VALIDEE', label: 'Inclure factures VALIDEE', defaultChecked: true },
+          { key: 'PAYEE', label: 'Inclure factures PAYEE', defaultChecked: true },
+          { key: 'ANNULEE', label: 'Inclure factures ANNULEE', defaultChecked: true },
+        ]}
+        onExport={({ selectedOptions, dateDebut, dateFin }) => {
+          exportFacturesPDF(
+            factures,
+            { search, statut: status, dateDebut, dateFin },
+            { statuses: selectedOptions }
+          );
+          setIsExportOpen(false);
+        }}
+      />
+
+      <Modal isOpen={isQuickClientOpen} onClose={() => setIsQuickClientOpen(false)} title="Creation rapide client" size="md">
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm text-gray-600">Nom</label>
+            <input
+              value={quickClient.nom}
+              onChange={(e) => setQuickClient((prev) => ({ ...prev, nom: e.target.value }))}
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300"
+            />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Email</label>
+            <input
+              type="email"
+              value={quickClient.email}
+              onChange={(e) => setQuickClient((prev) => ({ ...prev, email: e.target.value }))}
+              className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300"
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm text-gray-600">Ville</label>
+              <input
+                value={quickClient.ville}
+                onChange={(e) => setQuickClient((prev) => ({ ...prev, ville: e.target.value }))}
+                className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600">Telephone</label>
+              <input
+                value={quickClient.telephone}
+                onChange={(e) => setQuickClient((prev) => ({ ...prev, telephone: e.target.value }))}
+                className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setIsQuickClientOpen(false)} className="px-4 py-2 rounded-lg border border-gray-200">Annuler</button>
+            <button type="button" onClick={onCreateQuickClient} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">Creer client</button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Package, AlertTriangle, Wallet } from 'lucide-react';
+import { Package, AlertTriangle, Wallet, FileText } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import StatCard from '../../components/common/StatCard';
 import SearchBar from '../../components/common/SearchBar';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
-import Badge from '../../components/common/Badge';
+import ExportModal from '../../components/common/ExportModal';
 import {
   createProduit,
   deleteProduit,
@@ -14,6 +14,8 @@ import {
   getProduits,
   updateProduit,
 } from '../../services/stocksService';
+import { useAuth } from '../../context/AuthContext';
+import { exportProduitsPDF } from '../../utils/exportPDF';
 
 const UNITES = ['unite', 'kg', 'litre', 'metre', 'boite'];
 
@@ -26,7 +28,19 @@ const parseList = (response) => {
 
 const formatCurrency = (value) => new Intl.NumberFormat('fr-MA', { style: 'currency', currency: 'MAD' }).format(Number(value || 0));
 
+const getStockColor = (quantite, seuil) => {
+  const q = Number(quantite || 0);
+  const s = Number(seuil || 0);
+  if (q === 0) return 'text-red-700 font-bold';
+  if (q <= s) return 'text-red-600 font-semibold';
+  if (q <= s * 1.25) return 'text-orange-500';
+  if (q <= s * 1.5) return 'text-yellow-500';
+  if (q <= s * 2) return 'text-lime-500';
+  return 'text-green-600 font-medium';
+};
+
 const Produits = () => {
+  const { hasRole } = useAuth();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [produits, setProduits] = useState([]);
@@ -36,6 +50,7 @@ const Produits = () => {
   const [categorie, setCategorie] = useState('');
   const [alerte, setAlerte] = useState('TOUS');
   const [modal, setModal] = useState({ open: false, mode: 'create', produit: null });
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm({
     defaultValues: {
@@ -141,23 +156,35 @@ const Produits = () => {
     { Header: 'Reference', accessor: 'reference' },
     { Header: 'Designation', accessor: 'designation' },
     { Header: 'Categorie', accessor: 'categorie' },
-    { Header: 'Stock', accessor: 'quantiteStock' },
+    {
+      Header: 'Stock',
+      accessor: 'stockDisplay',
+      Cell: ({ value }) => {
+        if (value.quantite === 0) {
+          return <span className={`inline-flex items-center gap-1 ${value.className}`}><AlertTriangle size={14} /> Rupture</span>;
+        }
+        return <span className={value.className}>{value.quantite} {value.unite}</span>;
+      },
+    },
     { Header: 'Seuil', accessor: 'seuilAlerte' },
     { Header: 'Prix', accessor: 'prixUnitaire', Cell: ({ value }) => formatCurrency(value) },
-    {
-      Header: 'Alerte',
-      accessor: 'alerte',
-      Cell: ({ value }) => (
-        value ? <span className="px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">ALERTE</span>
-          : <span className="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">OK</span>
-      ),
-    },
   ];
 
   const rows = produits.map((p) => ({
     ...p,
     alerte: Number(p.quantiteStock || 0) <= Number(p.seuilAlerte || 0),
+    stockDisplay: {
+      quantite: Number(p.quantiteStock || 0),
+      unite: p.unite || '',
+      className: getStockColor(p.quantiteStock, p.seuilAlerte),
+    },
   }));
+
+  const filteredRows = rows.filter((r) => {
+    if (alerte === 'OUI') return r.alerte;
+    if (alerte === 'OK') return !r.alerte;
+    return true;
+  });
 
   return (
     <div className="space-y-4">
@@ -170,7 +197,17 @@ const Produits = () => {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <h2 className="text-xl font-bold text-gray-900">Produits</h2>
-          <button onClick={openCreate} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium">+ Nouveau Produit</button>
+          <div className="flex items-center gap-2">
+            {hasRole('ADMIN', 'MAGASINIER') && (
+              <button
+                onClick={() => setIsExportOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg border border-gray-300 text-sm"
+              >
+                <FileText size={16} /> Exporter PDF
+              </button>
+            )}
+            <button onClick={openCreate} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium">+ Nouveau Produit</button>
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <SearchBar placeholder="Rechercher reference ou designation" value={search} onSearch={setSearch} />
@@ -181,13 +218,14 @@ const Produits = () => {
           <select value={alerte} onChange={(e) => setAlerte(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300">
             <option value="TOUS">Tous</option>
             <option value="OUI">En alerte</option>
+            <option value="OK">OK</option>
           </select>
         </div>
       </div>
 
       {errorMsg && <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 text-sm">{errorMsg}</div>}
 
-      <DataTable columns={columns} data={rows} loading={loading} onEdit={openEdit} onDelete={onDelete} />
+      <DataTable columns={columns} data={filteredRows} loading={loading} onEdit={openEdit} onDelete={onDelete} />
 
       <Modal isOpen={modal.open} onClose={() => setModal({ open: false, mode: 'create', produit: null })} title={modal.mode === 'create' ? 'Nouveau produit' : 'Modifier produit'} size="lg">
         <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -234,6 +272,24 @@ const Produits = () => {
           </div>
         </form>
       </Modal>
+
+      <ExportModal
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        title="Exporter les produits en PDF"
+        rowsCount={filteredRows.length}
+        options={[
+          { key: 'alertOnly', label: 'Afficher uniquement produits en alerte', defaultChecked: alerte === 'OUI' },
+          { key: 'includeValorisation', label: 'Inclure valorisation du stock', defaultChecked: true },
+        ]}
+        onExport={({ selectedOptions, dateDebut, dateFin }) => {
+          exportProduitsPDF(filteredRows, { search, categorie, dateDebut, dateFin }, {
+            alertOnly: selectedOptions.includes('alertOnly'),
+            includeValorisation: selectedOptions.includes('includeValorisation'),
+          });
+          setIsExportOpen(false);
+        }}
+      />
     </div>
   );
 };

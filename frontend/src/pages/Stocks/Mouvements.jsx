@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { FileText } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Modal from '../../components/common/Modal';
+import ExportModal from '../../components/common/ExportModal';
 import Badge from '../../components/common/Badge';
 import {
   ajustementStock,
@@ -10,6 +12,8 @@ import {
   getProduits,
   sortieStock,
 } from '../../services/stocksService';
+import { useAuth } from '../../context/AuthContext';
+import { exportMouvementsPDF } from '../../utils/exportPDF';
 
 const parseList = (response) => {
   const data = response?.data?.data;
@@ -22,6 +26,7 @@ const parseList = (response) => {
 const formatDate = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '-');
 
 const Mouvements = () => {
+  const { hasRole } = useAuth();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [mouvements, setMouvements] = useState([]);
@@ -29,6 +34,7 @@ const Mouvements = () => {
   const [typeFilter, setTypeFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [modal, setModal] = useState({ open: false, type: null });
+  const [isExportOpen, setIsExportOpen] = useState(false);
   const [selectedProduitStock, setSelectedProduitStock] = useState(0);
 
   const { register, handleSubmit, reset, watch, formState: { isSubmitting } } = useForm({
@@ -144,6 +150,9 @@ const Mouvements = () => {
     <div className="space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3">
         <div className="flex flex-wrap gap-2">
+          {hasRole('ADMIN', 'MAGASINIER') && (
+            <button onClick={() => setIsExportOpen(true)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 border border-gray-300 text-gray-700 text-sm"><FileText size={16} /> Exporter PDF</button>
+          )}
           <button onClick={() => openModal('ENTREE')} className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm">Entree</button>
           <button onClick={() => openModal('SORTIE')} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm">Sortie</button>
           <button onClick={() => openModal('AJUSTEMENT')} className="px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm">Ajustement</button>
@@ -211,6 +220,17 @@ const Mouvements = () => {
           </div>
         </form>
       </Modal>
+
+      <ExportModal
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        title="Exporter les mouvements en PDF"
+        rowsCount={rows.length}
+        onExport={({ dateDebut, dateFin }) => {
+          exportMouvementsPDF(mouvements, { type: typeFilter, dateDebut, dateFin });
+          setIsExportOpen(false);
+        }}
+      />
     </div>
   );
 };

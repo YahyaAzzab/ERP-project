@@ -96,6 +96,32 @@ const EmployeSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref : 'User',
     },
+
+    historiqueStatuts: [
+      {
+        statut: {
+          type: String,
+          enum: ['ACTIF', 'INACTIF', 'SUSPENDU'],
+          required: true,
+        },
+        dateDebut: {
+          type: Date,
+          required: true,
+        },
+        dateFin: {
+          type: Date,
+          default: null,
+        },
+        motif: {
+          type: String,
+          trim: true,
+        },
+        modifiePar: {
+          type: Schema.Types.ObjectId,
+          ref: 'User',
+        },
+      },
+    ],
   },
   {
     timestamps: true,

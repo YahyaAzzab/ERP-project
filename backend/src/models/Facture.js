@@ -37,10 +37,13 @@ const FactureSchema = new Schema(
     date        : { type: Date, default: Date.now },
     dateEcheance: { type: Date },
 
-    // Données client dénormalisées (pour conserver l'historique si le client change)
-    clientNom    : { type: String, required: [true, 'Nom client obligatoire'], trim: true },
-    clientEmail  : { type: String, trim: true, lowercase: true },
-    clientAdresse: { type: String, trim: true },
+    // Référence vers le module Clients
+    client: {
+      type: Schema.Types.ObjectId,
+      ref: 'Client',
+      required: [true, 'Le client est obligatoire'],
+      index: true,
+    },
 
     lignes: {
       type    : [LigneFactureSchema],
@@ -89,8 +92,18 @@ FactureSchema.pre('save', function (next) {
   next();
 });
 
+// Compatibilité legacy : anciens champs exposés en virtuels.
+FactureSchema.virtual('clientNom').get(function getClientNom() {
+  if (this.client && typeof this.client === 'object' && this.client.nom) return this.client.nom;
+  return '';
+});
+
+FactureSchema.virtual('clientEmail').get(function getClientEmail() {
+  if (this.client && typeof this.client === 'object' && this.client.email) return this.client.email;
+  return '';
+});
+
 FactureSchema.index({ statut: 1 });
 FactureSchema.index({ date: -1 });
-FactureSchema.index({ clientNom: 'text' });
 
 module.exports = mongoose.model('Facture', FactureSchema);

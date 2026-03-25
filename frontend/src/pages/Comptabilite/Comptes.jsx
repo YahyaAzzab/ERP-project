@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { FileText } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import Badge from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
+import ExportModal from '../../components/common/ExportModal';
 import SearchBar from '../../components/common/SearchBar';
 import { createCompte, deleteCompte, getComptes, updateCompte } from '../../services/comptaService';
+import { exportBalancePDF } from '../../utils/exportPDF';
+import { useAuth } from '../../context/AuthContext';
 
 const TYPES = ['TOUS', 'ACTIF', 'PASSIF', 'CHARGE', 'PRODUIT'];
 
@@ -16,12 +20,14 @@ const extractComptes = (response) => {
 };
 
 const Comptes = () => {
+  const { hasRole } = useAuth();
   const [loading, setLoading] = useState(false);
   const [comptes, setComptes] = useState([]);
   const [search, setSearch] = useState('');
   const [type, setType] = useState('TOUS');
   const [errorMsg, setErrorMsg] = useState('');
   const [modal, setModal] = useState({ open: false, mode: 'create', compte: null });
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm({
     defaultValues: {
@@ -112,7 +118,17 @@ const Comptes = () => {
             <h2 className="text-xl font-bold text-gray-900">Plan Comptable</h2>
             <p className="text-sm text-gray-500">Gestion des comptes comptables et de leur statut.</p>
           </div>
-          <button onClick={openCreate} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium">+ Nouveau compte</button>
+          <div className="flex items-center gap-2">
+            {hasRole('ADMIN', 'COMPTABLE') && (
+              <button
+                onClick={() => setIsExportOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg border border-gray-300 text-sm"
+              >
+                <FileText size={16} /> Exporter PDF
+              </button>
+            )}
+            <button onClick={openCreate} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium">+ Nouveau compte</button>
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
           <SearchBar placeholder="Rechercher numero ou libelle" value={search} onSearch={setSearch} />
@@ -181,6 +197,25 @@ const Comptes = () => {
           </div>
         </form>
       </Modal>
+
+      <ExportModal
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        title="Exporter la balance en PDF"
+        rowsCount={comptes.length}
+        onExport={() => {
+          const balanceLike = comptes.map((c) => ({
+            numero: c.numero,
+            libelle: c.libelle,
+            type: c.type,
+            totalDebit: 0,
+            totalCredit: 0,
+            solde: 0,
+          }));
+          exportBalancePDF(balanceLike);
+          setIsExportOpen(false);
+        }}
+      />
     </div>
   );
 };
