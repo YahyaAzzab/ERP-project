@@ -1,3 +1,156 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+	html,
+	body,
+	#root {
+		min-height: 100%;
+	}
+
+	body {
+		@apply bg-gray-100 text-gray-900;
+	}
+
+	.dark body {
+		@apply bg-slate-950 text-gray-100;
+	}
+
+	.dark input,
+	.dark select,
+	.dark textarea {
+		color: rgb(243 244 246);
+	}
+
+	.dark input,
+	.dark select,
+	.dark textarea {
+		background-color: rgb(31 41 55);
+		border-color: rgb(55 65 81);
+	}
+}
+
+@layer utilities {
+	.dark .bg-white {
+		@apply bg-gray-800;
+	}
+
+	.dark .bg-gray-50 {
+		@apply bg-gray-900;
+	}
+
+	.dark .bg-gray-100 {
+		@apply bg-gray-800;
+	}
+
+	/* Fix for zebra rows using Tailwind opacity utility (bg-gray-50/50) */
+	.dark .bg-gray-50\/50 {
+		background-color: rgb(31 41 55 / 0.55);
+	}
+
+	.dark tr.bg-gray-50\/50:hover,
+	.dark .hover\:bg-gray-50:hover {
+		background-color: rgb(55 65 81 / 0.75);
+	}
+
+	.dark .border-gray-100,
+	.dark .border-gray-200,
+	.dark .border-gray-300 {
+		@apply border-gray-700;
+	}
+
+	.dark .text-gray-900,
+	.dark .text-gray-800,
+	.dark .text-gray-700 {
+		@apply text-gray-100;
+	}
+
+	.dark .text-gray-600,
+	.dark .text-gray-500,
+	.dark .text-gray-400 {
+		@apply text-gray-300;
+	}
+
+	.dark .text-black {
+		@apply text-gray-100;
+	}
+
+	.dark .hover\:text-black:hover {
+		@apply text-white;
+	}
+
+	.dark .hover\:text-gray-800:hover,
+	.dark .hover\:text-gray-900:hover {
+		@apply text-white;
+	}
+
+	.dark .hover\:bg-gray-50:hover,
+	.dark .hover\:bg-gray-100:hover,
+	.dark .hover\:bg-gray-200:hover {
+		@apply bg-gray-700;
+	}
+
+	/* Harmonize feedback panels in dark mode */
+	.dark .bg-red-50 {
+		background-color: rgb(69 10 10 / 0.35);
+	}
+
+	.dark .bg-green-50 {
+		background-color: rgb(20 83 45 / 0.35);
+	}
+
+	.dark .bg-blue-50 {
+		background-color: rgb(30 58 138 / 0.35);
+	}
+
+	.dark .bg-amber-50,
+	.dark .bg-yellow-50 {
+		background-color: rgb(120 53 15 / 0.35);
+	}
+
+	.dark .text-red-700,
+	.dark .text-red-600 {
+		color: rgb(252 165 165);
+	}
+
+	.dark .text-green-700,
+	.dark .text-green-600 {
+		color: rgb(134 239 172);
+	}
+
+	.dark .text-blue-700,
+	.dark .text-blue-600 {
+		color: rgb(147 197 253);
+	}
+
+	.dark .text-amber-700,
+	.dark .text-yellow-700 {
+		color: rgb(253 230 138);
+	}
+
+	/* Harmonize badge palettes in dark mode */
+	.dark .bg-green-100 {
+		background-color: rgb(20 83 45 / 0.5);
+	}
+
+	.dark .bg-red-100 {
+		background-color: rgb(127 29 29 / 0.45);
+	}
+
+	.dark .bg-blue-100 {
+		background-color: rgb(30 58 138 / 0.45);
+	}
+
+	.dark .bg-yellow-100,
+	.dark .bg-orange-100,
+	.dark .bg-amber-100 {
+		background-color: rgb(120 53 15 / 0.45);
+	}
+
+	.dark .bg-violet-100,
+	.dark .bg-cyan-100,
+	.dark .bg-emerald-100 {
+		background-color: rgb(51 65 85 / 0.65);
+	}
+}

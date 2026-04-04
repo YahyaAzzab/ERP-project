@@ -20,6 +20,10 @@ import Mouvements from './pages/Stocks/Mouvements';
 import Fournisseurs from './pages/Stocks/Fournisseurs';
 import Inventaire from './pages/Stocks/Inventaire';
 import Clients from './pages/Clients';
+import Parametres from './pages/Parametres';
+import Messages from './pages/Messages';
+import { ThemeProvider } from './context/ThemeContext';
+import { NotificationProvider } from './context/NotificationContext';
 
 const AppRoutes = () => {
   const { hasRole } = useAuth();
@@ -54,6 +58,8 @@ const AppRoutes = () => {
         {hasRole('admin', 'magasinier') && <Route path="stocks/inventaire" element={<Inventaire />} />}
         {hasRole('admin', 'comptable') && <Route path="clients" element={<Clients />} />}
         {hasRole('admin', 'comptable') && <Route path="clients/:clientId" element={<Clients />} />}
+        {hasRole('admin', 'comptable', 'rh', 'magasinier') && <Route path="messages" element={<Messages />} />}
+        {hasRole('admin') && <Route path="parametres" element={<Parametres />} />}
       </Route>
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
@@ -63,9 +69,13 @@ const AppRoutes = () => {
 const App = () => {
   return (
     <Router>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <NotificationProvider>
+            <AppRoutes />
+          </NotificationProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </Router>
   );
 };

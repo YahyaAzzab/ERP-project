@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, BarChart, DollarSign, Users, Package, ChevronDown, ChevronRight, UserRound } from 'lucide-react';
+import { LogOut, BarChart, DollarSign, Users, Package, ChevronDown, ChevronRight, UserRound, Settings, MessageSquare } from 'lucide-react';
 
 const Sidebar = () => {
   const { logout, hasRole } = useAuth();
@@ -57,14 +57,14 @@ const Sidebar = () => {
     <aside
       onMouseEnter={() => isDesktop && setIsHovered(true)}
       onMouseLeave={() => isDesktop && setIsHovered(false)}
-      className={`h-full bg-gray-800 text-white flex flex-col transition-all duration-300 ease-in-out ${isExpanded ? 'w-64' : 'w-20'}`}
+      className={`h-full bg-gray-800 text-white flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'w-64' : 'w-20'}`}
     >
       <div className="p-4 border-b border-gray-700">
         <h1 className={`font-bold whitespace-nowrap overflow-hidden transition-all duration-300 ${isExpanded ? 'text-2xl opacity-100' : 'text-lg opacity-100 text-center'}`}>
-          {isExpanded ? 'ERP PME' : 'ERP'}
+          {isExpanded ? 'ERP DOYA' : 'ERP'}
         </h1>
       </div>
-      <nav className="flex-grow">
+      <nav className="flex-grow overflow-y-auto">
         <ul>
           {hasRole('admin', 'comptable', 'rh', 'magasinier') && (
             <li>
@@ -154,6 +154,24 @@ const Sidebar = () => {
               <NavLink to="/clients" className={baseLinkClass} onClick={handleNav}>
                 <UserRound size={20} />
                 {isExpanded && <span className="ml-4">Clients</span>}
+              </NavLink>
+            </li>
+          )}
+
+          {hasRole('admin', 'comptable', 'rh', 'magasinier') && (
+            <li>
+              <NavLink to="/messages" className={baseLinkClass} onClick={handleNav}>
+                <MessageSquare size={20} />
+                {isExpanded && <span className="ml-4">Messages</span>}
+              </NavLink>
+            </li>
+          )}
+
+          {hasRole('admin') && (
+            <li>
+              <NavLink to="/parametres" className={baseLinkClass} onClick={handleNav}>
+                <Settings size={20} />
+                {isExpanded && <span className="ml-4">Parametres</span>}
               </NavLink>
             </li>
           )}

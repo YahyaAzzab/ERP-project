@@ -8,7 +8,7 @@ const createDoc = (title, filtres = {}) => {
   const doc = new jsPDF();
   const now = new Date().toLocaleString('fr-FR');
   doc.setFontSize(16);
-  doc.text('ERP PME', 14, 16);
+  doc.text('ERP DOYA', 14, 16);
   doc.setFontSize(12);
   doc.text(title, 14, 24);
   doc.setFontSize(9);

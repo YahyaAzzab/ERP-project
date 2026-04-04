@@ -6,7 +6,8 @@
 const { validationResult } = require('express-validator');
 const User                 = require('../models/User');
 const { generateToken }    = require('../utils/generateToken');
-const { success, error, created } = require('../utils/apiResponse');
+const { success, error, created, paginate } = require('../utils/apiResponse');
+const mongoose = require('mongoose');
 
 // =============================================================
 // HELPER — formate un User pour la réponse (sans password)
@@ -157,6 +158,192 @@ const me = async (req, res) => {
 };
 
 // =============================================================
+// ADMIN — GET /api/auth/users
+// =============================================================
+const getUsers = async (req, res) => {
+  try {
+    const page = Math.max(parseInt(req.query.page || '1', 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 100);
+    const skip = (page - 1) * limit;
+
+    const { search, role, actif } = req.query;
+    const query = {};
+
+    if (search?.trim()) {
+      const regex = new RegExp(search.trim(), 'i');
+      query.$or = [{ nom: regex }, { prenom: regex }, { email: regex }];
+    }
+
+    if (role && ['ADMIN', 'COMPTABLE', 'RH', 'MAGASINIER'].includes(String(role).toUpperCase())) {
+      query.role = String(role).toUpperCase();
+    }
+
+    if (typeof actif === 'string') {
+      if (actif.toLowerCase() === 'true') query.actif = true;
+      if (actif.toLowerCase() === 'false') query.actif = false;
+    }
+
+    const [users, total] = await Promise.all([
+      User.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      User.countDocuments(query),
+    ]);
+
+    return paginate(res, { users: users.map(formatUser) }, total, page, limit, 'Utilisateurs recuperes avec succes');
+  } catch (err) {
+    console.error('[authController.getUsers]', err.message);
+    return error(res, 'Erreur serveur lors de la recuperation des utilisateurs.', 500);
+  }
+};
+
+// =============================================================
+// ADMIN — POST /api/auth/users
+// =============================================================
+const createUserByAdmin = async (req, res) => {
+  try {
+    const validationErrors = validationResult(req);
+    if (!validationErrors.isEmpty()) {
+      return error(
+        res,
+        'Donnees invalides',
+        422,
+        validationErrors.array().map((e) => ({ champ: e.path, message: e.msg }))
+      );
+    }
+
+    const { nom, prenom, email, password, role, actif } = req.body;
+
+    const existingUser = await User.findOne({ email: String(email).toLowerCase().trim() });
+    if (existingUser) {
+      return error(res, 'Un compte existe deja avec cet email.', 409);
+    }
+
+    const user = await User.create({
+      nom,
+      prenom,
+      email,
+      password,
+      role,
+      actif: actif !== false,
+    });
+
+    return created(res, { user: formatUser(user) }, 'Profil utilisateur cree avec succes');
+  } catch (err) {
+    if (err.code === 11000) {
+      return error(res, 'Email deja utilise.', 409);
+    }
+    console.error('[authController.createUserByAdmin]', err.message);
+    return error(res, 'Erreur serveur lors de la creation du profil.', 500);
+  }
+};
+
+// =============================================================
+// ADMIN — PUT /api/auth/users/:id
+// =============================================================
+const updateUserByAdmin = async (req, res) => {
+  try {
+    const validationErrors = validationResult(req);
+    if (!validationErrors.isEmpty()) {
+      return error(
+        res,
+        'Donnees invalides',
+        422,
+        validationErrors.array().map((e) => ({ champ: e.path, message: e.msg }))
+      );
+    }
+
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return error(res, 'ID utilisateur invalide.', 400);
+    }
+
+    const user = await User.findById(id);
+    if (!user) return error(res, 'Utilisateur introuvable.', 404);
+
+    const updates = {};
+    if (typeof req.body.nom === 'string') updates.nom = req.body.nom;
+    if (typeof req.body.prenom === 'string') updates.prenom = req.body.prenom;
+    if (typeof req.body.email === 'string') updates.email = req.body.email;
+    if (typeof req.body.role === 'string') updates.role = req.body.role;
+    if (typeof req.body.actif === 'boolean') updates.actif = req.body.actif;
+
+    if (updates.email) {
+      const alreadyUsed = await User.findOne({
+        email: String(updates.email).toLowerCase().trim(),
+        _id: { $ne: user._id },
+      });
+      if (alreadyUsed) {
+        return error(res, 'Cet email est deja utilise.', 409);
+      }
+    }
+
+    Object.assign(user, updates);
+    await user.save();
+
+    return success(res, { user: formatUser(user) }, 'Profil utilisateur mis a jour avec succes');
+  } catch (err) {
+    console.error('[authController.updateUserByAdmin]', err.message);
+    return error(res, 'Erreur serveur lors de la mise a jour du profil.', 500);
+  }
+};
+
+// =============================================================
+// ADMIN — PUT /api/auth/users/:id/password
+// =============================================================
+const resetUserPasswordByAdmin = async (req, res) => {
+  try {
+    const validationErrors = validationResult(req);
+    if (!validationErrors.isEmpty()) {
+      return error(
+        res,
+        'Donnees invalides',
+        422,
+        validationErrors.array().map((e) => ({ champ: e.path, message: e.msg }))
+      );
+    }
+
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return error(res, 'ID utilisateur invalide.', 400);
+    }
+
+    const user = await User.findById(id).select('+password');
+    if (!user) return error(res, 'Utilisateur introuvable.', 404);
+
+    user.password = req.body.nouveauPassword;
+    await user.save();
+
+    return success(res, null, 'Mot de passe reinitialise avec succes');
+  } catch (err) {
+    console.error('[authController.resetUserPasswordByAdmin]', err.message);
+    return error(res, 'Erreur serveur lors de la reinitialisation du mot de passe.', 500);
+  }
+};
+
+// =============================================================
+// ADMIN — DELETE /api/auth/users/:id
+// =============================================================
+const deleteUserByAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return error(res, 'ID utilisateur invalide.', 400);
+    }
+
+    if (String(req.user._id) === String(id)) {
+      return error(res, 'Vous ne pouvez pas supprimer votre propre profil.', 400);
+    }
+
+    const user = await User.findByIdAndDelete(id);
+    if (!user) return error(res, 'Utilisateur introuvable.', 404);
+
+    return success(res, null, 'Profil utilisateur supprime avec succes');
+  } catch (err) {
+    console.error('[authController.deleteUserByAdmin]', err.message);
+    return error(res, 'Erreur serveur lors de la suppression du profil.', 500);
+  }
+};
+
+// =============================================================
 // PUT /api/auth/password  (route protégée — authMiddleware requis)
 // =============================================================
 const updatePassword = async (req, res) => {
@@ -211,4 +398,14 @@ const updatePassword = async (req, res) => {
   }
 };
 
-module.exports = { register, login, me, updatePassword };
+module.exports = {
+  register,
+  login,
+  me,
+  updatePassword,
+  getUsers,
+  createUserByAdmin,
+  updateUserByAdmin,
+  resetUserPasswordByAdmin,
+  deleteUserByAdmin,
+};

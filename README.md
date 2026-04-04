@@ -1,4 +1,4 @@
-# ERP PME — Système de Gestion Intégré
+# ERP DOYA — Système de Gestion Intégré
 
 > Projet de Fin d'Études (PFE) — ERP simplifié pour PME  
 > Développé étape par étape, de l'architecture jusqu'au déploiement
@@ -926,4 +926,4 @@ Resultat attendu: `403` acces refuse
 
 
 
-*ERP PME — Projet de Fin d'Études | Stack : Node.js + Express + MongoDB + React*
+*ERP DOYA — Projet de Fin d'Études | Stack : Node.js + Express + MongoDB + React*

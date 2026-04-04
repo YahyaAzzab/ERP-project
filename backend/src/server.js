@@ -18,8 +18,10 @@
 // (avant tout autre require qui pourrait en avoir besoin)
 require('dotenv').config();
 
+const http      = require('http');
 const app       = require('./app');
 const connectDB = require('./config/db');
+const { initRealtime } = require('./realtime/socket');
 
 const PORT = process.env.PORT || 5000;
 
@@ -29,13 +31,17 @@ const startServer = async () => {
     // 1. Connexion à MongoDB
     await connectDB();
 
-    // 2. Démarrage du serveur HTTP
-    const server = app.listen(PORT, () => {
+    // 2. Démarrage du serveur HTTP + moteur temps reel
+    const httpServer = http.createServer(app);
+    initRealtime(httpServer);
+
+    const server = httpServer.listen(PORT, () => {
       console.log('');
       console.log('🚀 ============================================');
-      console.log(`   ERP PME — Serveur démarré`);
+      console.log(`   ERP DOYA — Serveur démarré`);
       console.log(`   URL     : http://localhost:${PORT}`);
       console.log(`   Health  : http://localhost:${PORT}/api/health`);
+      console.log(`   Realtime: ws://localhost:${PORT}`);
       console.log(`   Mode    : ${process.env.NODE_ENV}`);
       console.log('================================================');
       console.log('');

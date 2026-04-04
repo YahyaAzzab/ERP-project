@@ -21,6 +21,8 @@ const rhRoutes = require('./routes/rhRoutes');
 const stocksRoutes = require('./routes/stocksRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const clientRoutes = require('./routes/clientRoutes');
+const messageRoutes = require('./routes/messageRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 const app = express();
 
@@ -103,6 +105,8 @@ app.use('/api/rh',           rhRoutes);
 app.use('/api/stocks',       stocksRoutes);
 app.use('/api/dashboard',    dashboardRoutes);
 app.use('/api/clients',      clientRoutes);
+app.use('/api/messages',     messageRoutes);
+app.use('/api/notifications', notificationRoutes);
 // ---
 
 // =============================================================

@@ -7,6 +7,7 @@ const express        = require('express');
 const { body }       = require('express-validator');
 const authController = require('../controllers/authController');
 const authMiddleware = require('../middleware/authMiddleware');
+const { checkRole }  = require('../middleware/roleMiddleware');
 
 const router = express.Router();
 
@@ -65,6 +66,74 @@ const updatePasswordValidation = [
     .matches(/[0-9]/).withMessage('Au moins 1 chiffre'),
 ];
 
+const adminCreateUserValidation = [
+  body('nom')
+    .trim()
+    .notEmpty().withMessage('Le nom est obligatoire')
+    .isLength({ max: 50 }).withMessage('Le nom ne doit pas depasser 50 caracteres'),
+
+  body('prenom')
+    .trim()
+    .notEmpty().withMessage('Le prenom est obligatoire')
+    .isLength({ max: 50 }).withMessage('Le prenom ne doit pas depasser 50 caracteres'),
+
+  body('email')
+    .trim()
+    .notEmpty().withMessage("L'email est obligatoire")
+    .isEmail().withMessage("Format d'email invalide")
+    .normalizeEmail(),
+
+  body('password')
+    .notEmpty().withMessage('Le mot de passe est obligatoire')
+    .isLength({ min: 8 }).withMessage('Minimum 8 caracteres')
+    .matches(/[A-Z]/).withMessage('Au moins 1 lettre majuscule')
+    .matches(/[0-9]/).withMessage('Au moins 1 chiffre'),
+
+  body('role')
+    .notEmpty().withMessage('Le role est obligatoire')
+    .isIn(['ADMIN', 'COMPTABLE', 'RH', 'MAGASINIER'])
+    .withMessage('Role invalide'),
+
+  body('actif')
+    .optional()
+    .isBoolean().withMessage('Le champ actif doit etre booleen'),
+];
+
+const adminUpdateUserValidation = [
+  body('nom')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 50 }).withMessage('Nom invalide'),
+
+  body('prenom')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 50 }).withMessage('Prenom invalide'),
+
+  body('email')
+    .optional()
+    .trim()
+    .isEmail().withMessage("Format d'email invalide")
+    .normalizeEmail(),
+
+  body('role')
+    .optional()
+    .isIn(['ADMIN', 'COMPTABLE', 'RH', 'MAGASINIER'])
+    .withMessage('Role invalide'),
+
+  body('actif')
+    .optional()
+    .isBoolean().withMessage('Le champ actif doit etre booleen'),
+];
+
+const adminResetPasswordValidation = [
+  body('nouveauPassword')
+    .notEmpty().withMessage('Le nouveau mot de passe est obligatoire')
+    .isLength({ min: 8 }).withMessage('Minimum 8 caracteres')
+    .matches(/[A-Z]/).withMessage('Au moins 1 lettre majuscule')
+    .matches(/[0-9]/).withMessage('Au moins 1 chiffre'),
+];
+
 // =============================================================
 // DÉFINITION DES ROUTES
 // =============================================================
@@ -96,5 +165,11 @@ router.get('/me', authMiddleware, authController.me);
  * @access  Privé (JWT requis)
  */
 router.put('/password', authMiddleware, updatePasswordValidation, authController.updatePassword);
+
+router.get('/users', authMiddleware, checkRole('ADMIN'), authController.getUsers);
+router.post('/users', authMiddleware, checkRole('ADMIN'), adminCreateUserValidation, authController.createUserByAdmin);
+router.put('/users/:id', authMiddleware, checkRole('ADMIN'), adminUpdateUserValidation, authController.updateUserByAdmin);
+router.put('/users/:id/password', authMiddleware, checkRole('ADMIN'), adminResetPasswordValidation, authController.resetUserPasswordByAdmin);
+router.delete('/users/:id', authMiddleware, checkRole('ADMIN'), authController.deleteUserByAdmin);
 
 module.exports = router;

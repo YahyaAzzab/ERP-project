@@ -29,7 +29,7 @@ const MouvementStock  = require('../models/MouvementStock');
 
 const usersData = [
   {
-    nom   : 'Administrateur',
+    nom   : 'DOYA',
     prenom: 'ERP',
     email : 'admin@erp-pme.ma',
     password: 'Admin@1234',
