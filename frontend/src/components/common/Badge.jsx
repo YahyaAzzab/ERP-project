@@ -6,6 +6,8 @@ const Badge = ({ status }) => {
   const colorClasses = {
     // Green
     'ACTIF': 'bg-green-100 text-green-800',
+    'LU': 'bg-green-100 text-green-800',
+    'VU': 'bg-green-100 text-green-800',
     'PAYEE': 'bg-green-100 text-green-800',
     'PAYE': 'bg-green-100 text-green-800',
     'APPROUVE': 'bg-green-100 text-green-800',
@@ -16,6 +18,7 @@ const Badge = ({ status }) => {
     'REFUSE': 'bg-red-100 text-red-800',
     // Yellow
     'EN_ATTENTE': 'bg-yellow-100 text-yellow-800',
+    'RECU': 'bg-yellow-100 text-yellow-800',
     'BROUILLON': 'bg-yellow-100 text-yellow-800',
     // Blue
     'VALIDEE': 'bg-blue-100 text-blue-800',

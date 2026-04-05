@@ -117,10 +117,21 @@ const Messages = () => {
     try {
       const response = await getMessageById(row._id);
       const msg = response?.data?.data?.message || row;
-      setDetailModal({ open: true, message: msg });
-      if (activeTab === 'reception' && !msg.lu) {
-        await marquerCommeLu(msg._id);
-        fetchMessages();
+      const shouldMarkAsRead = activeTab === 'reception' && !msg.lu;
+      const openedMessage = shouldMarkAsRead ? { ...msg, lu: true } : msg;
+
+      setDetailModal({ open: true, message: openedMessage });
+
+      if (shouldMarkAsRead) {
+        // Optimistic update: switch to VU as soon as the user opens the message.
+        setMessages((prev) => prev.map((m) => (m._id === msg._id ? { ...m, lu: true } : m)));
+        setUnreadCount((prev) => Math.max(0, Number(prev || 0) - 1));
+
+        try {
+          await marquerCommeLu(msg._id);
+        } catch {
+          fetchMessages();
+        }
       }
     } catch (error) {
       setErrorMsg(error?.response?.data?.message || 'Lecture du message impossible.');
@@ -142,7 +153,7 @@ const Messages = () => {
       senderOrRecipient,
       { Header: 'Sujet', accessor: 'sujet' },
       { Header: 'Date', accessor: 'date' },
-      ...(activeTab === 'reception' ? [{ Header: 'Statut', accessor: 'statut', Cell: ({ value }) => <Badge status={value} /> }] : []),
+      { Header: 'Etat', accessor: 'statut', Cell: ({ value }) => <Badge status={value} /> },
       {
         Header: 'Actions',
         accessor: 'actions',
@@ -160,7 +171,7 @@ const Messages = () => {
       ...m,
       counterparty,
       date: toDateTime(m.createdAt),
-      statut: m.lu ? 'ACTIF' : 'EN_ATTENTE',
+      statut: m.lu ? 'VU' : 'RECU',
       actions: (
         <button
           onClick={() => onOpenMessage(m)}
@@ -276,7 +287,8 @@ const Messages = () => {
                 <strong>{detailModal.message.destinataire?.prenom} {detailModal.message.destinataire?.nom}</strong>
               </p>
               <p><span className="text-gray-500">Date:</span> {toDateTime(detailModal.message.createdAt)}</p>
-              <p><span className="text-gray-500">Statut:</span> <Badge status={detailModal.message.lu ? 'ACTIF' : 'EN_ATTENTE'} /></p>
+              <p><span className="text-gray-500">Etat:</span> <Badge status={detailModal.message.lu ? 'LU' : 'RECU'} /></p>
+              <p><span className="text-gray-500">Etat:</span> <Badge status={detailModal.message.lu ? 'VU' : 'RECU'} /></p>
             </div>
 
             <div>

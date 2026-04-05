@@ -6,7 +6,7 @@ import Badge from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
 import ExportModal from '../../components/common/ExportModal';
 import SearchBar from '../../components/common/SearchBar';
-import { createCompte, deleteCompte, getComptes, updateCompte } from '../../services/comptaService';
+import { createCompte, deleteCompte, getBalance, getComptes, updateCompte } from '../../services/comptaService';
 import { exportBalancePDF } from '../../utils/exportPDF';
 import { useAuth } from '../../context/AuthContext';
 
@@ -35,7 +35,6 @@ const Comptes = () => {
       libelle: '',
       type: 'ACTIF',
       description: '',
-      actif: true,
     },
   });
 
@@ -60,7 +59,7 @@ const Comptes = () => {
   }, [search, type]);
 
   const openCreate = () => {
-    reset({ numero: '', libelle: '', type: 'ACTIF', description: '', actif: true });
+    reset({ numero: '', libelle: '', type: 'ACTIF', description: '' });
     setModal({ open: true, mode: 'create', compte: null });
   };
 
@@ -70,7 +69,6 @@ const Comptes = () => {
       libelle: compte.libelle,
       type: compte.type,
       description: compte.description || '',
-      actif: compte.actif,
     });
     setModal({ open: true, mode: 'edit', compte });
   };
@@ -83,7 +81,6 @@ const Comptes = () => {
         await updateCompte(modal.compte._id, {
           libelle: values.libelle,
           description: values.description,
-          actif: values.actif === true || values.actif === 'true',
         });
       }
       setModal({ open: false, mode: 'create', compte: null });
@@ -107,7 +104,6 @@ const Comptes = () => {
     { Header: 'Numero', accessor: 'numero' },
     { Header: 'Libelle', accessor: 'libelle' },
     { Header: 'Type', accessor: 'type', Cell: ({ value }) => <Badge status={value} /> },
-    { Header: 'Statut', accessor: 'actif', Cell: ({ value }) => <Badge status={value ? 'ACTIF' : 'INACTIF'} /> },
   ], []);
 
   return (
@@ -116,7 +112,7 @@ const Comptes = () => {
         <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Plan Comptable</h2>
-            <p className="text-sm text-gray-500">Gestion des comptes comptables et de leur statut.</p>
+            <p className="text-sm text-gray-500">Gestion des comptes comptables par type.</p>
           </div>
           <div className="flex items-center gap-2">
             {hasRole('ADMIN', 'COMPTABLE') && (
@@ -184,11 +180,6 @@ const Comptes = () => {
             <textarea {...register('description')} className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300" rows={3} />
           </div>
 
-          <div className="flex items-center gap-2">
-            <input type="checkbox" {...register('actif')} id="actif" />
-            <label htmlFor="actif" className="text-sm text-gray-700">Compte actif</label>
-          </div>
-
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={() => setModal({ open: false, mode: 'create', compte: null })} className="px-4 py-2 rounded-lg border border-gray-200">Annuler</button>
             <button type="submit" disabled={isSubmitting} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
@@ -203,17 +194,43 @@ const Comptes = () => {
         onClose={() => setIsExportOpen(false)}
         title="Exporter la balance en PDF"
         rowsCount={comptes.length}
-        onExport={() => {
-          const balanceLike = comptes.map((c) => ({
-            numero: c.numero,
-            libelle: c.libelle,
-            type: c.type,
-            totalDebit: 0,
-            totalCredit: 0,
-            solde: 0,
-          }));
-          exportBalancePDF(balanceLike);
-          setIsExportOpen(false);
+        onExport={async () => {
+          try {
+            const response = await getBalance();
+            const balanceComptes = response?.data?.data?.comptes || [];
+
+            const balanceByCompteId = new Map(
+              balanceComptes
+                .filter((item) => item?._id)
+                .map((item) => [String(item._id), item])
+            );
+
+            const balanceByNumero = new Map(
+              balanceComptes
+                .filter((item) => item?.numero)
+                .map((item) => [String(item.numero), item])
+            );
+
+            const balanceLike = comptes.map((c) => {
+              const fromId = c?._id ? balanceByCompteId.get(String(c._id)) : null;
+              const fromNumero = c?.numero ? balanceByNumero.get(String(c.numero)) : null;
+              const source = fromId || fromNumero || {};
+
+              return {
+                numero: c.numero,
+                libelle: c.libelle,
+                type: c.type,
+                totalDebit: Number(source.totalDebit || 0),
+                totalCredit: Number(source.totalCredit || 0),
+                solde: Number(source.solde || 0),
+              };
+            });
+
+            exportBalancePDF(balanceLike);
+            setIsExportOpen(false);
+          } catch (error) {
+            setErrorMsg(error?.response?.data?.message || 'Impossible d\'exporter la balance PDF.');
+          }
         }}
       />
     </div>
