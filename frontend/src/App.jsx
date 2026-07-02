@@ -26,7 +26,11 @@ import { ThemeProvider } from './context/ThemeContext';
 import { NotificationProvider } from './context/NotificationContext';
 
 const AppRoutes = () => {
-  const { hasRole } = useAuth();
+  const { hasRole, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-screen">Chargement...</div>;
+  }
 
   return (
     <Routes>
@@ -59,7 +63,9 @@ const AppRoutes = () => {
         {hasRole('admin', 'comptable') && <Route path="clients" element={<Clients />} />}
         {hasRole('admin', 'comptable') && <Route path="clients/:clientId" element={<Clients />} />}
         {hasRole('admin', 'comptable', 'rh', 'magasinier') && <Route path="messages" element={<Messages />} />}
-        {hasRole('admin') && <Route path="parametres" element={<Parametres />} />}
+        {hasRole('admin') && <Route path="parametres" element={<Navigate to="/parametres/utilisateurs" replace />} />}
+        {hasRole('admin') && <Route path="parametres/utilisateurs" element={<Parametres initialTab="users" showTabs={false} />} />}
+        {hasRole('admin') && <Route path="parametres/logs" element={<Parametres initialTab="logs" showTabs={false} />} />}
       </Route>
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>

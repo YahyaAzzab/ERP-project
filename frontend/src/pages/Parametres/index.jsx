@@ -1,19 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Eye, Pencil, Trash2, KeyRound, UserPlus, Settings } from 'lucide-react';
+import { Eye, Pencil, Trash2, KeyRound, UserPlus, Settings, FileText, RefreshCcw } from 'lucide-react';
 import DataTable from '../../components/common/DataTable';
 import SearchBar from '../../components/common/SearchBar';
 import Modal from '../../components/common/Modal';
 import Badge from '../../components/common/Badge';
 import {
   getUsers,
+  getAuditLogs,
   createUser,
   updateUser,
   resetUserPassword,
   deleteUser,
 } from '../../services/settingsService';
+import { exportLogsPDF } from '../../utils/exportPDF';
 
 const ROLES = ['ADMIN', 'COMPTABLE', 'RH', 'MAGASINIER'];
+const LOG_MODULES = ['TOUS', 'AUTH', 'COMPTABILITE', 'RH', 'STOCKS', 'CLIENTS', 'MESSAGERIE', 'NOTIFICATIONS', 'DASHBOARD', 'PARAMETRES', 'GENERAL'];
+const LOG_METHODS = ['TOUS', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+const LOG_RESULTS = ['TOUS', 'SUCCES', 'ERREUR'];
 
 const extractUsers = (response) => {
   const data = response?.data?.data;
@@ -22,17 +27,44 @@ const extractUsers = (response) => {
   return [];
 };
 
-const Parametres = () => {
+const extractLogs = (response) => {
+  const data = response?.data?.data;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.logs)) return data.logs;
+  return [];
+};
+
+const extractPagination = (response) => response?.data?.pagination || {
+  total: 0,
+  page: 1,
+  limit: 20,
+  totalPages: 1,
+};
+
+const formatDateTime = (value) => (value ? new Date(value).toLocaleString('fr-FR') : '-');
+
+const Parametres = ({ initialTab = 'users', showTabs = true }) => {
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState('');
   const [role, setRole] = useState('TOUS');
   const [actif, setActif] = useState('TOUS');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [modal, setModal] = useState({ open: false, mode: 'create', user: null });
   const [detailsModal, setDetailsModal] = useState({ open: false, user: null });
   const [passwordModal, setPasswordModal] = useState({ open: false, user: null });
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logs, setLogs] = useState([]);
+  const [logSearch, setLogSearch] = useState('');
+  const [logModule, setLogModule] = useState('TOUS');
+  const [logMethod, setLogMethod] = useState('TOUS');
+  const [logResult, setLogResult] = useState('TOUS');
+  const [logDateDebut, setLogDateDebut] = useState('');
+  const [logDateFin, setLogDateFin] = useState('');
+  const [logLimit, setLogLimit] = useState(20);
+  const [logsPagination, setLogsPagination] = useState({ total: 0, page: 1, limit: 20, totalPages: 1 });
 
   const {
     register,
@@ -81,6 +113,40 @@ const Parametres = () => {
   useEffect(() => {
     fetchUsers();
   }, [search, role, actif]);
+
+  const fetchLogs = async (page = 1) => {
+    setLogsLoading(true);
+    try {
+      const params = {
+        page,
+        limit: logLimit,
+      };
+
+      if (logSearch.trim()) params.search = logSearch.trim();
+      if (logModule !== 'TOUS') params.module = logModule;
+      if (logMethod !== 'TOUS') params.method = logMethod;
+      if (logResult === 'SUCCES') params.success = true;
+      if (logResult === 'ERREUR') params.success = false;
+      if (logDateDebut) params.dateDebut = logDateDebut;
+      if (logDateFin) params.dateFin = logDateFin;
+
+      const response = await getAuditLogs(params);
+      setLogs(extractLogs(response));
+      setLogsPagination(extractPagination(response));
+    } catch (error) {
+      setErrorMsg(error?.response?.data?.message || 'Chargement des logs impossible.');
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogs(1);
+  }, [logSearch, logModule, logMethod, logResult, logDateDebut, logDateFin, logLimit]);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   const openCreate = () => {
     setSuccessMsg('');
@@ -193,40 +259,234 @@ const Parametres = () => {
     ),
   })), [users]);
 
+  const methodClasses = {
+    GET: 'bg-blue-100 text-blue-800',
+    POST: 'bg-green-100 text-green-800',
+    PUT: 'bg-amber-100 text-amber-800',
+    PATCH: 'bg-violet-100 text-violet-800',
+    DELETE: 'bg-red-100 text-red-800',
+  };
+
+  const logColumns = [
+    { Header: 'Date', accessor: 'date' },
+    { Header: 'Utilisateur', accessor: 'utilisateur' },
+    { Header: 'Module', accessor: 'module', Cell: ({ value }) => <Badge status={value} /> },
+    {
+      Header: 'Methode',
+      accessor: 'method',
+      Cell: ({ value }) => (
+        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${methodClasses[value] || 'bg-gray-100 text-gray-800'}`}>
+          {value}
+        </span>
+      ),
+    },
+    { Header: 'Action', accessor: 'action' },
+    { Header: 'HTTP', accessor: 'statusCode' },
+    {
+      Header: 'Resultat',
+      accessor: 'resultat',
+      Cell: ({ value }) => (
+        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${value === 'SUCCES' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+          {value}
+        </span>
+      ),
+    },
+    { Header: 'Duree', accessor: 'duree' },
+    { Header: 'IP', accessor: 'ip' },
+  ];
+
+  const logRows = useMemo(() => logs.map((l) => {
+    const nomComplet = `${l.user?.prenom || ''} ${l.user?.nom || ''}`.trim();
+    const userLabel = nomComplet || l.user?.email || l.email || 'Anonyme';
+
+    return {
+      ...l,
+      userLabel,
+      date: formatDateTime(l.createdAt),
+      utilisateur: userLabel,
+      module: l.module || 'GENERAL',
+      method: l.method || '-',
+      action: l.action || '-',
+      statusCode: l.statusCode || '-',
+      resultat: l.success ? 'SUCCES' : 'ERREUR',
+      duree: l.durationMs !== undefined && l.durationMs !== null ? `${l.durationMs} ms` : '-',
+      ip: l.ip || '-',
+    };
+  }), [logs]);
+
+  const exportLogs = () => {
+    exportLogsPDF(logRows, {
+      recherche: logSearch,
+      module: logModule !== 'TOUS' ? logModule : '',
+      methode: logMethod !== 'TOUS' ? logMethod : '',
+      resultat: logResult !== 'TOUS' ? logResult : '',
+      dateDebut: logDateDebut,
+      dateFin: logDateFin,
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold text-gray-900 inline-flex items-center gap-2"><Settings size={20} /> Parametres</h2>
-            <p className="text-sm text-gray-500">Administration des profils utilisateurs et de leurs acces.</p>
+            <p className="text-sm text-gray-500">
+              {activeTab === 'users'
+                ? 'Administration des profils utilisateurs et de leurs acces.'
+                : "Suivi global des actions des utilisateurs sur ERP DOYA."}
+            </p>
           </div>
-          <button
-            onClick={openCreate}
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium inline-flex items-center gap-2"
-          >
-            <UserPlus size={16} /> Nouveau profil
-          </button>
+          {activeTab === 'users' && (
+            <button
+              onClick={openCreate}
+              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium inline-flex items-center gap-2"
+            >
+              <UserPlus size={16} /> Nouveau profil
+            </button>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-          <SearchBar placeholder="Rechercher nom, prenom, email" value={search} onSearch={setSearch} />
-          <select value={role} onChange={(e) => setRole(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300">
-            <option value="TOUS">Tous les roles</option>
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-          <select value={actif} onChange={(e) => setActif(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300">
-            <option value="TOUS">Tous les statuts</option>
-            <option value="ACTIF">ACTIF</option>
-            <option value="INACTIF">INACTIF</option>
-          </select>
-        </div>
+        {showTabs && (
+          <div className="mt-4 inline-flex rounded-lg border border-gray-200 p-1 bg-gray-50">
+            <button
+              type="button"
+              onClick={() => setActiveTab('users')}
+              className={`px-3 py-2 rounded-md text-sm font-medium ${
+                activeTab === 'users' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              Gestion utilisateurs
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('logs')}
+              className={`px-3 py-2 rounded-md text-sm font-medium ${
+                activeTab === 'logs' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              Journal d'activite ERP DOYA
+            </button>
+          </div>
+        )}
       </div>
 
       {errorMsg && <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 text-sm">{errorMsg}</div>}
       {successMsg && <div className="bg-green-50 text-green-700 border border-green-200 rounded-lg p-3 text-sm">{successMsg}</div>}
 
-      <DataTable columns={columns} data={rows} loading={loading} />
+      {activeTab === 'users' && (
+        <>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <SearchBar placeholder="Rechercher nom, prenom, email" value={search} onSearch={setSearch} />
+              <select value={role} onChange={(e) => setRole(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300">
+                <option value="TOUS">Tous les roles</option>
+                {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+              <select value={actif} onChange={(e) => setActif(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300">
+                <option value="TOUS">Tous les statuts</option>
+                <option value="ACTIF">ACTIF</option>
+                <option value="INACTIF">INACTIF</option>
+              </select>
+            </div>
+          </div>
+
+          <DataTable columns={columns} data={rows} loading={loading} />
+        </>
+      )}
+
+      {activeTab === 'logs' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Journal d'activite plateforme</h3>
+              <p className="text-sm text-gray-500">Suivi de toutes les actions API des utilisateurs avec date, statut et performance.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => fetchLogs(logsPagination.page || 1)}
+                className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm inline-flex items-center gap-2 hover:bg-gray-50"
+              >
+                <RefreshCcw size={16} /> Rafraichir
+              </button>
+              <button
+                type="button"
+                onClick={exportLogs}
+                disabled={logRows.length === 0}
+                className="px-3 py-2 rounded-lg border border-gray-300 bg-gray-100 text-gray-700 text-sm inline-flex items-center gap-2 hover:bg-gray-200 disabled:opacity-60"
+              >
+                <FileText size={16} /> Exporter PDF
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <SearchBar placeholder="Rechercher utilisateur, action, chemin" value={logSearch} onSearch={setLogSearch} />
+            <select value={logModule} onChange={(e) => setLogModule(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300">
+              {LOG_MODULES.map((m) => <option key={m} value={m}>{m === 'TOUS' ? 'Tous les modules' : m}</option>)}
+            </select>
+            <select value={logMethod} onChange={(e) => setLogMethod(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300">
+              {LOG_METHODS.map((m) => <option key={m} value={m}>{m === 'TOUS' ? 'Toutes les methodes' : m}</option>)}
+            </select>
+            <select value={logResult} onChange={(e) => setLogResult(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300">
+              {LOG_RESULTS.map((r) => <option key={r} value={r}>{r === 'TOUS' ? 'Tous les resultats' : r}</option>)}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="text-sm text-gray-600">Date debut</label>
+              <input type="date" value={logDateDebut} onChange={(e) => setLogDateDebut(e.target.value)} className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300" />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600">Date fin</label>
+              <input type="date" value={logDateFin} onChange={(e) => setLogDateFin(e.target.value)} className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300" />
+            </div>
+            <div>
+              <label className="text-sm text-gray-600">Lignes par page</label>
+              <select
+                value={logLimit}
+                onChange={(e) => {
+                  setLogLimit(Number(e.target.value));
+                }}
+                className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+          </div>
+
+          <DataTable columns={logColumns} data={logRows} loading={logsLoading} />
+
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-sm text-gray-600">
+            <p>
+              Total logs: <strong>{logsPagination.total || 0}</strong> | Page <strong>{logsPagination.page || 1}</strong> / <strong>{logsPagination.totalPages || 1}</strong>
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={(logsPagination.page || 1) <= 1}
+                onClick={() => fetchLogs((logsPagination.page || 1) - 1)}
+                className="px-3 py-2 rounded-lg border border-gray-300 disabled:opacity-60"
+              >
+                Precedent
+              </button>
+              <button
+                type="button"
+                disabled={(logsPagination.page || 1) >= (logsPagination.totalPages || 1)}
+                onClick={() => fetchLogs((logsPagination.page || 1) + 1)}
+                className="px-3 py-2 rounded-lg border border-gray-300 disabled:opacity-60"
+              >
+                Suivant
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Modal
         isOpen={modal.open}

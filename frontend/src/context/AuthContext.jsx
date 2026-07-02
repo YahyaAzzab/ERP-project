@@ -12,11 +12,20 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const token = localStorage.getItem('erp_token');
-    const user = localStorage.getItem('erp_user');
-    if (token && user) {
-      setToken(token);
-      setUser(JSON.parse(user));
+    const userData = localStorage.getItem('erp_user');
+
+    if (token && userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setToken(token);
+        setUser(parsedUser);
+      } catch (err) {
+        console.warn('[AuthProvider] erp_user localStorage invalid:', err);
+        localStorage.removeItem('erp_token');
+        localStorage.removeItem('erp_user');
+      }
     }
+
     setIsLoading(false);
   }, []);
 

@@ -5,7 +5,7 @@ import Modal from '../../components/common/Modal';
 import DataTable from '../../components/common/DataTable';
 import Badge from '../../components/common/Badge';
 import ExportModal from '../../components/common/ExportModal';
-import { annulerConge, createConge, getCongeById, getConges, getEmployes, traiterConge } from '../../services/rhService';
+import { annulerConge, createConge, getCongeById, getConges, getEmployes, getSoldeConges, traiterConge } from '../../services/rhService';
 import { useAuth } from '../../context/AuthContext';
 import { exportCongesPDF } from '../../utils/exportPDF';
 
@@ -55,6 +55,7 @@ const Conges = () => {
   const [traitementModal, setTraitementModal] = useState({ open: false, conge: null, statut: 'APPROUVE' });
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [commentaireRH, setCommentaireRH] = useState('');
+  const [soldeInfo, setSoldeInfo] = useState({ loading: false, data: null, error: '' });
 
   const { register, handleSubmit, watch, reset, formState: { isSubmitting } } = useForm({
     defaultValues: {
@@ -68,6 +69,8 @@ const Conges = () => {
 
   const watchedStart = watch('dateDebut');
   const watchedEnd = watch('dateFin');
+  const watchedEmployeId = watch('employeId');
+  const watchedType = watch('type');
 
   const currentUserRole = String(user?.role || '').toUpperCase();
   const canApprove = currentUserRole === 'ADMIN' || currentUserRole === 'RH';
@@ -96,6 +99,34 @@ const Conges = () => {
   useEffect(() => {
     fetchData();
   }, [statut]);
+
+  useEffect(() => {
+    const loadSolde = async () => {
+      if (!isOpen || !watchedEmployeId || watchedType !== 'ANNUEL') {
+        setSoldeInfo({ loading: false, data: null, error: '' });
+        return;
+      }
+
+      setSoldeInfo({ loading: true, data: null, error: '' });
+
+      try {
+        const response = await getSoldeConges(watchedEmployeId);
+        setSoldeInfo({
+          loading: false,
+          data: response?.data?.data || null,
+          error: '',
+        });
+      } catch (error) {
+        setSoldeInfo({
+          loading: false,
+          data: null,
+          error: error?.response?.data?.message || 'Impossible de recuperer le solde de conges.',
+        });
+      }
+    };
+
+    loadSolde();
+  }, [isOpen, watchedEmployeId, watchedType]);
 
   const onSubmit = async (values) => {
     try {
@@ -259,6 +290,22 @@ const Conges = () => {
 
           <div className="text-xs text-gray-500">Jours ouvres estimes: <strong>{businessDays(watchedStart, watchedEnd)}</strong></div>
 
+          {watchedType === 'ANNUEL' && watchedEmployeId && (
+            <div className="text-xs rounded-md border border-blue-100 bg-blue-50 text-blue-800 px-3 py-2">
+              {soldeInfo.loading && <span>Chargement du solde de conges annuels...</span>}
+
+              {!soldeInfo.loading && soldeInfo.error && <span>{soldeInfo.error}</span>}
+
+              {!soldeInfo.loading && !soldeInfo.error && soldeInfo.data && (
+                <span>
+                  Solde annuel restant: <strong>{soldeInfo.data.soldeActuel ?? 0} jour(s)</strong>
+                  {' | '}Pris cette annee: <strong>{soldeInfo.data.totalPris ?? 0} jour(s)</strong>
+                  {' | '}En attente: <strong>{Array.isArray(soldeInfo.data.congesEnAttente) ? soldeInfo.data.congesEnAttente.length : 0}</strong>
+                </span>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="text-sm text-gray-600">Motif</label>
             <textarea rows={3} {...register('motif')} className="w-full mt-1 px-3 py-2 rounded-lg border border-gray-300" />
@@ -280,6 +327,7 @@ const Conges = () => {
               <p><span className="text-gray-500">Employe:</span> <strong>{detailsModal.conge.employe?.prenom} {detailsModal.conge.employe?.nom}</strong></p>
               <p><span className="text-gray-500">Matricule:</span> {detailsModal.conge.employe?.matricule || '-'}</p>
               <p><span className="text-gray-500">Departement:</span> {detailsModal.conge.employe?.departement || '-'}</p>
+              <p><span className="text-gray-500">Solde annuel restant:</span> {detailsModal.conge.employe?.soldeConges ?? '-'}</p>
               <p><span className="text-gray-500">Type:</span> {detailsModal.conge.type}</p>
               <p><span className="text-gray-500">Periode:</span> {formatDate(detailsModal.conge.dateDebut)} - {formatDate(detailsModal.conge.dateFin)}</p>
               <p><span className="text-gray-500">Jours ouvres:</span> {detailsModal.conge.nombreJours || businessDays(detailsModal.conge.dateDebut, detailsModal.conge.dateFin)}</p>

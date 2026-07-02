@@ -5,3 +5,4 @@ export const createUser = (payload) => api.post('/auth/users', payload);
 export const updateUser = (id, payload) => api.put(`/auth/users/${id}`, payload);
 export const resetUserPassword = (id, nouveauPassword) => api.put(`/auth/users/${id}/password`, { nouveauPassword });
 export const deleteUser = (id) => api.delete(`/auth/users/${id}`);
+export const getAuditLogs = (params) => api.get('/logs', { params });

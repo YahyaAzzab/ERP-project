@@ -176,3 +176,31 @@ export const exportInventairePDF = (inventaire = []) => {
   const body = inventaire.map((p) => [p.reference, p.designation, p.categorie, `${p.quantiteStock || 0} ${p.unite || ''}`.trim(), p.seuilAlerte || 0, formatCurrency(p.prixUnitaire), formatCurrency((Number(p.quantiteStock || 0) * Number(p.prixUnitaire || 0)))]);
   saveTableDoc(doc, `inventaire-${Date.now()}.pdf`, ['Reference', 'Designation', 'Categorie', 'Stock', 'Seuil', 'Prix', 'Valeur'], body);
 }
+
+export const exportLogsPDF = (logs = [], filtres = {}) => {
+  const doc = createDoc('Journal des activites', filtres);
+  const body = logs.map((log) => {
+    const userLabel = log.userLabel || '-';
+    const statut = Number(log.statusCode || 0);
+    const resultat = log.success ? 'Succes' : 'Erreur';
+
+    return [
+      formatDate(log.createdAt),
+      userLabel,
+      log.module || '-',
+      log.method || '-',
+      log.action || '-',
+      statut || '-',
+      resultat,
+      log.durationMs !== undefined && log.durationMs !== null ? `${log.durationMs} ms` : '-',
+      log.ip || '-',
+    ];
+  });
+
+  saveTableDoc(
+    doc,
+    `logs-plateforme-${Date.now()}.pdf`,
+    ['Date', 'Utilisateur', 'Module', 'Methode', 'Action', 'HTTP', 'Resultat', 'Duree', 'IP'],
+    body
+  );
+};

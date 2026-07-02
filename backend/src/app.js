@@ -13,6 +13,7 @@ const express = require('express');
 const cors    = require('cors');
 const helmet  = require('helmet');
 const morgan  = require('morgan');
+const auditLogMiddleware = require('./middleware/auditLogMiddleware');
 
 // Routes
 const authRoutes = require('./routes/authRoutes');
@@ -23,6 +24,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const clientRoutes = require('./routes/clientRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const auditLogRoutes = require('./routes/auditLogRoutes');
 
 const app = express();
 
@@ -49,9 +51,17 @@ app.use(helmet());
  * origines différentes. Sans cors, le navigateur bloque les requêtes.
  */
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? process.env.FRONTEND_URL   // URL de prod (à définir dans .env)
-    : ['http://localhost:3000', 'http://localhost:3001'], // URLs de dev React
+  origin: (origin, callback) => {
+    if (process.env.NODE_ENV === 'production') {
+      return callback(null, process.env.FRONTEND_URL);
+    }
+
+    if (!origin || origin.startsWith('http://localhost')) {
+      return callback(null, true);
+    }
+
+    callback(new Error('Origine CORS non autorisée'));
+  },
   credentials: true,             // Autorise les cookies / Authorization header
 }));
 
@@ -78,6 +88,9 @@ app.use(express.json({ limit: '10mb' }));
  * Utile si certains clients envoient des données en form-urlencoded.
  */
 app.use(express.urlencoded({ extended: true }));
+
+// Journalisation plateforme (actions utilisateur, dates, statut HTTP...)
+app.use(auditLogMiddleware);
 
 // =============================================================
 // ROUTES
@@ -107,6 +120,7 @@ app.use('/api/dashboard',    dashboardRoutes);
 app.use('/api/clients',      clientRoutes);
 app.use('/api/messages',     messageRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/logs',         auditLogRoutes);
 // ---
 
 // =============================================================

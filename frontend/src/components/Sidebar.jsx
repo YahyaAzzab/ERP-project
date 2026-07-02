@@ -20,12 +20,14 @@ const Sidebar = () => {
     comptabilite: false,
     rh: false,
     stocks: false,
+    parametres: false,
   });
 
   const autoOpenedMenus = useMemo(() => ({
     comptabilite: location.pathname.startsWith('/comptabilite'),
     rh: location.pathname.startsWith('/rh'),
     stocks: location.pathname.startsWith('/stocks'),
+    parametres: location.pathname.startsWith('/parametres'),
   }), [location.pathname]);
 
   useEffect(() => {
@@ -149,7 +151,7 @@ const Sidebar = () => {
             </li>
           )}
 
-          {hasRole('admin') && (
+          {hasRole('admin', 'comptable') && (
             <li>
               <NavLink to="/clients" className={baseLinkClass} onClick={handleNav}>
                 <UserRound size={20} />
@@ -169,10 +171,24 @@ const Sidebar = () => {
 
           {hasRole('admin') && (
             <li>
-              <NavLink to="/parametres" className={baseLinkClass} onClick={handleNav}>
-                <Settings size={20} />
-                {isExpanded && <span className="ml-4">Parametres</span>}
-              </NavLink>
+              <button
+                type="button"
+                onClick={() => toggleMenu('parametres')}
+                className={`w-full flex items-center p-4 hover:bg-gray-700 ${isExpanded ? 'justify-between' : 'justify-center'}`}
+              >
+                <span className="flex items-center">
+                  <Settings size={20} />
+                  {isExpanded && <span className="ml-4">Parametres</span>}
+                </span>
+                {isExpanded && (isMenuOpen('parametres') ? <ChevronDown size={16} /> : <ChevronRight size={16} />)}
+              </button>
+
+              {isExpanded && isMenuOpen('parametres') && (
+                <div className="pl-10 pr-3 pb-3 space-y-1 transition-all duration-200">
+                  <NavLink to="/parametres/utilisateurs" className={childLinkClass} onClick={handleNav}>Gestion utilisateurs</NavLink>
+                  <NavLink to="/parametres/logs" className={childLinkClass} onClick={handleNav}>Journal d'activite</NavLink>
+                </div>
+              )}
             </li>
           )}
         </ul>

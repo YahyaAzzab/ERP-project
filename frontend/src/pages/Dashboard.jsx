@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ResponsiveContainer,
@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 import { TrendingUp, Users, Boxes, FileWarning } from 'lucide-react';
 import StatCard from '../components/common/StatCard';
+import { useNotifications } from '../context/NotificationContext';
 import {
   getAlertes,
   getGraphiqueCA,
@@ -31,6 +32,7 @@ const PIE_COLORS = ['#2563EB', '#0EA5E9', '#22C55E', '#F59E0B', '#EF4444', '#8B5
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { notifications } = useNotifications();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [kpis, setKpis] = useState(null);
@@ -39,6 +41,7 @@ const Dashboard = () => {
   const [mouvementsData, setMouvementsData] = useState([]);
   const [alertes, setAlertes] = useState({ stocks: [], congesEnAttente: [], facturesImpayees: [] });
   const [lastRefreshAt, setLastRefreshAt] = useState(null);
+  const lastRealtimeNotificationId = useRef(null);
 
   const fetchDashboard = async () => {
     setLoading(true);
@@ -71,6 +74,23 @@ const Dashboard = () => {
     const intervalId = setInterval(fetchDashboard, 30000);
     return () => clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (!Array.isArray(notifications) || notifications.length === 0) return;
+
+    const newest = notifications[0];
+    if (!newest?._id) return;
+
+    if (lastRealtimeNotificationId.current === null) {
+      lastRealtimeNotificationId.current = String(newest._id);
+      return;
+    }
+
+    if (lastRealtimeNotificationId.current !== String(newest._id)) {
+      lastRealtimeNotificationId.current = String(newest._id);
+      fetchDashboard();
+    }
+  }, [notifications]);
 
   const cards = useMemo(() => {
     const compta = kpis?.comptabilite || {};

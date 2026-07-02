@@ -5,6 +5,48 @@
 
 ---
 
+## Aperçu visuel
+
+Découvrez rapidement les principaux espaces de l'application :
+
+### 1. Page de connexion sécurisée
+
+![Login](docs/screenshots/login.png)
+
+Page de connexion claire et professionnelle avec validation des identifiants et accès immédiat aux rôles de l'ERP.
+
+### 2. Tableau de bord administrateur
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+Vue globale avec KPIs financiers, alertes, graphiques de performance et accès rapide aux modules principaux.
+
+### 3. Module Comptabilité — Factures
+
+![Factures](docs/screenshots/factures.png)
+
+Gestion des factures, statut des paiements, recherche par client et actions métiers centralisées.
+
+### 4. Module RH — Employés
+
+![Employés](docs/screenshots/employes.png)
+
+Liste des employés, suivi des postes, départements et actions RH (ajout, modification, désactivation).
+
+### 5. Module Stocks — Produits
+
+![Produits](docs/screenshots/produits.png)
+
+Catalogue produits avec quantités, seuils d'alerte, prix et gestion des stocks en temps réel.
+
+### 6. Module Clients
+
+![Clients](docs/screenshots/clients.png)
+
+Gestion des clients avec statistiques, factures liées et recherche rapide.
+
+---
+
 ## Description
 
 Système ERP (Enterprise Resource Planning) simplifié, conçu pour les Petites et Moyennes Entreprises (PME). Il couvre trois modules fonctionnels complets :

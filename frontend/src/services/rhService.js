@@ -52,6 +52,10 @@ export const annulerConge = (id) => {
   return api.put(`/rh/conges/${id}/annuler`);
 };
 
+export const getSoldeConges = (employeId) => {
+  return api.get(`/rh/employes/${employeId}/solde-conges`);
+};
+
 // =================================
 // FICHES DE PAIE
 // =================================
