@@ -28,6 +28,38 @@ const auditLogRoutes = require('./routes/auditLogRoutes');
 
 const app = express();
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+].filter(Boolean);
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+
+  const normalizedOrigin = origin.replace(/\/$/, '');
+
+  return allowedOrigins.some((allowed) => {
+    const normalizedAllowed = allowed.replace(/\/$/, '');
+    if (normalizedOrigin === normalizedAllowed) return true;
+
+    try {
+      const allowedUrl = new URL(normalizedAllowed);
+      const originUrl = new URL(normalizedOrigin);
+      const isVercelDomain = allowedUrl.hostname.endsWith('.vercel.app') || allowedUrl.hostname.endsWith('.vercel.dev');
+      const sameVercelHost = isVercelDomain && (
+        originUrl.hostname === allowedUrl.hostname || originUrl.hostname.endsWith(`.${allowedUrl.hostname}`)
+      );
+
+      return sameVercelHost;
+    } catch {
+      return false;
+    }
+  });
+};
+
 // =============================================================
 // MIDDLEWARES GLOBAUX
 // =============================================================
@@ -52,11 +84,7 @@ app.use(helmet());
  */
 app.use(cors({
   origin: (origin, callback) => {
-    if (process.env.NODE_ENV === 'production') {
-      return callback(null, process.env.FRONTEND_URL);
-    }
-
-    if (!origin || origin.startsWith('http://localhost')) {
+    if (!origin || isAllowedOrigin(origin)) {
       return callback(null, true);
     }
 
