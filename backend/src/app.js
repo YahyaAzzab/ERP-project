@@ -41,23 +41,31 @@ const isAllowedOrigin = (origin) => {
 
   const normalizedOrigin = origin.replace(/\/$/, '');
 
-  return allowedOrigins.some((allowed) => {
-    const normalizedAllowed = allowed.replace(/\/$/, '');
-    if (normalizedOrigin === normalizedAllowed) return true;
+  try {
+    const originUrl = new URL(normalizedOrigin);
 
-    try {
-      const allowedUrl = new URL(normalizedAllowed);
-      const originUrl = new URL(normalizedOrigin);
-      const isVercelDomain = allowedUrl.hostname.endsWith('.vercel.app') || allowedUrl.hostname.endsWith('.vercel.dev');
-      const sameVercelHost = isVercelDomain && (
-        originUrl.hostname === allowedUrl.hostname || originUrl.hostname.endsWith(`.${allowedUrl.hostname}`)
-      );
-
-      return sameVercelHost;
-    } catch {
-      return false;
+    if (originUrl.hostname.endsWith('.vercel.app') || originUrl.hostname.endsWith('.vercel.dev')) {
+      return true;
     }
-  });
+
+    if (originUrl.hostname === 'localhost' || originUrl.hostname === '127.0.0.1') {
+      return true;
+    }
+
+    return allowedOrigins.some((allowed) => {
+      const normalizedAllowed = allowed.replace(/\/$/, '');
+      if (normalizedOrigin === normalizedAllowed) return true;
+
+      try {
+        const allowedUrl = new URL(normalizedAllowed);
+        return originUrl.hostname === allowedUrl.hostname;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
 };
 
 // =============================================================
