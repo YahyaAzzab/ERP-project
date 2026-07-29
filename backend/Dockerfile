@@ -1,13 +1,15 @@
-FROM node:20-alpine
+FROM node:18-alpine
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
-COPY src ./src
-COPY .env.example ./.env.example
+COPY . .
 
-EXPOSE 5001
+ENV NODE_ENV=production
+ENV PORT=3000
 
-CMD ["node", "src/server.js"]
+EXPOSE 3000
+
+CMD ["npm", "start"]
