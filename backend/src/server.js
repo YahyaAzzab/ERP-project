@@ -22,6 +22,7 @@ const http      = require('http');
 const app       = require('./app');
 const connectDB = require('./config/db');
 const { initRealtime } = require('./realtime/socket');
+const { ensureDefaultAdminUser } = require('./utils/ensureDefaultAdmin');
 
 const PORT = process.env.PORT || 5000;
 
@@ -31,7 +32,10 @@ const startServer = async () => {
     // 1. Connexion à MongoDB
     await connectDB();
 
-    // 2. Démarrage du serveur HTTP + moteur temps reel
+    // 2. Garantir le compte admin par défaut
+    await ensureDefaultAdminUser();
+
+    // 3. Démarrage du serveur HTTP + moteur temps reel
     const httpServer = http.createServer(app);
     initRealtime(httpServer);
 

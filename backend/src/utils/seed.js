@@ -13,6 +13,7 @@ const bcrypt   = require('bcryptjs');
 
 // Import des modèles
 const User            = require('../models/User');
+const { ensureDefaultAdminUser } = require('./ensureDefaultAdmin');
 const CompteComptable = require('../models/CompteComptable');
 const EcritureComptable = require('../models/EcritureComptable');
 const Facture         = require('../models/Facture');
@@ -193,7 +194,8 @@ const seed = async () => {
       )
     );
     console.log(`   ${users.length} utilisateurs créés`);
-    const adminUser = users[0];
+    const adminUser = await ensureDefaultAdminUser();
+    console.log(`   Admin par défaut garanti: ${adminUser.email}`);
 
     // --- 2. Plan Comptable ---
     console.log('\n📊 Création du plan comptable...');
