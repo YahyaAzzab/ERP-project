@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 @layer base {
+	* {
+		box-sizing: border-box;
+	}
+
 	html,
 	body,
 	#root {
@@ -10,6 +14,7 @@
 	}
 
 	body {
+		overflow-x: hidden;
 		@apply bg-gray-100 text-gray-900;
 	}
 

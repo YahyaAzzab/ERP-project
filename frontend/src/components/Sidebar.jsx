@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogOut, BarChart, DollarSign, Users, Package, ChevronDown, ChevronRight, UserRound, Settings, MessageSquare } from 'lucide-react';
+import { LogOut, BarChart, DollarSign, Users, Package, ChevronDown, ChevronRight, UserRound, Settings, MessageSquare, X } from 'lucide-react';
 
-const Sidebar = () => {
+const Sidebar = ({ isMobileOpen = false, onCloseMobile = () => {} }) => {
   const { logout, hasRole } = useAuth();
   const location = useLocation();
   const [isDesktop, setIsDesktop] = useState(() => {
@@ -47,26 +47,43 @@ const Sidebar = () => {
     setOpenMenus((prev) => ({ ...prev, [key]: !isMenuOpen(key) }));
   };
 
+  const handleNav = () => {
+    if (!isDesktop) {
+      onCloseMobile();
+    }
+  };
+
   const baseLinkClass = ({ isActive }) =>
     `flex items-center p-4 hover:bg-gray-700 transition-all ${isActive ? 'bg-gray-900' : ''} ${isExpanded ? '' : 'justify-center'}`;
 
   const childLinkClass = ({ isActive }) =>
     `block py-2 px-4 rounded text-sm hover:bg-gray-700 ${isActive ? 'bg-gray-900 text-white' : 'text-gray-300'}`;
 
-  const handleNav = () => {};
-
   return (
-    <aside
-      onMouseEnter={() => isDesktop && setIsHovered(true)}
-      onMouseLeave={() => isDesktop && setIsHovered(false)}
-      className={`h-full bg-gray-800 text-white flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'w-64' : 'w-20'}`}
-    >
-      <div className="p-4 border-b border-gray-700">
-        <h1 className={`font-bold whitespace-nowrap overflow-hidden transition-all duration-300 ${isExpanded ? 'text-2xl opacity-100' : 'text-lg opacity-100 text-center'}`}>
-          {isExpanded ? 'ERP DOYA' : 'ERP'}
-        </h1>
-      </div>
-      <nav className="flex-grow overflow-y-auto">
+    <>
+      <div
+        className={`fixed inset-0 z-30 bg-black/50 transition-opacity duration-300 lg:hidden ${isMobileOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'}`}
+        onClick={onCloseMobile}
+      />
+      <aside
+        onMouseEnter={() => isDesktop && setIsHovered(true)}
+        onMouseLeave={() => isDesktop && setIsHovered(false)}
+        className={`fixed inset-y-0 left-0 z-40 flex flex-col overflow-hidden border-r border-gray-700 bg-gray-800 text-white transition-all duration-300 ease-in-out w-72 max-w-[85vw] ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:h-full lg:translate-x-0 ${isDesktop ? (isExpanded ? 'lg:w-64' : 'lg:w-20') : 'lg:w-72'}`}
+      >
+        <div className="flex items-center justify-between border-b border-gray-700 p-4">
+          <h1 className={`overflow-hidden whitespace-nowrap font-bold transition-all duration-300 ${isExpanded ? 'text-2xl opacity-100' : 'text-lg text-center opacity-100'}`}>
+            {isExpanded ? 'ERP DOYA' : 'ERP'}
+          </h1>
+          <button
+            type="button"
+            onClick={onCloseMobile}
+            className="rounded-lg p-2 hover:bg-gray-700 lg:hidden"
+            aria-label="Fermer le menu"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <nav className="flex-grow overflow-y-auto">
         <ul>
           {hasRole('admin', 'comptable', 'rh', 'magasinier') && (
             <li>
@@ -193,16 +210,20 @@ const Sidebar = () => {
           )}
         </ul>
       </nav>
-      <div className="p-4 border-t border-gray-700">
-        <button
-          onClick={logout}
-          className={`w-full flex items-center p-2 bg-red-600 hover:bg-red-700 rounded ${isExpanded ? '' : 'justify-center'}`}
-        >
-          <LogOut size={20} />
-          {isExpanded && <span className="ml-4">Déconnexion</span>}
-        </button>
-      </div>
-    </aside>
+        <div className="border-t border-gray-700 p-4">
+          <button
+            onClick={() => {
+              logout();
+              handleNav();
+            }}
+            className={`flex w-full items-center rounded bg-red-600 p-2 hover:bg-red-700 ${isExpanded ? '' : 'justify-center'}`}
+          >
+            <LogOut size={20} />
+            {isExpanded && <span className="ml-4">Déconnexion</span>}
+          </button>
+        </div>
+      </aside>
+    </>
   );
 };
 
